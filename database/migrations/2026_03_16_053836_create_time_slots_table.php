@@ -14,14 +14,23 @@ return new class extends Migration
         Schema::create('time_slots', function (Blueprint $table) {
             $table->id();
 
-            $table->foreignId('court_id')
-                ->constrained('courts')
-                ->cascadeOnDelete();
-
             $table->time('start_time');
             $table->time('end_time');
 
+            // 🔥 optional: untuk urutan slot
+            $table->integer('order_index')->nullable();
+
+            $table->boolean('is_active')->default(true);
+
+            $table->string('label')->nullable();
+
             $table->timestamps();
+
+            // 🔥 tidak boleh duplicate slot
+            $table->unique(['start_time', 'end_time']);
+
+            // 🔥 bantu sorting cepat
+            $table->index('start_time');
         });
     }
 

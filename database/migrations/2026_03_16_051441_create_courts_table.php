@@ -23,13 +23,21 @@ return new class extends Migration
                 ->cascadeOnDelete();
 
             $table->string('name');
+            $table->unique(['venue_id', 'name']);
 
-            $table->decimal('price_per_hour', 10, 2);
+            $table->decimal('price_per_hour', 10, 2)->unsigned();
 
-            $table->enum('status', ['active', 'inactive', 'maintenance'])
+            $table->enum('status', ['active', 'inactive'])
                 ->default('active');
 
+            $table->string('slug')->nullable();
+            $table->unique(['venue_id', 'slug']);
+
             $table->timestamps();
+            $table->softDeletes();
+
+            // 🔥 smarter index
+            $table->index(['venue_id', 'sport_id']);
         });
     }
 

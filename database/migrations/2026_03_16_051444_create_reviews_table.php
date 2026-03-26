@@ -13,13 +13,19 @@ return new class extends Migration
     {
         Schema::create('reviews', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('booking_id')->constrained('bookings')->onDelete('cascade');
-            $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
-            $table->foreignId('venue_id')->constrained('venues')->onDelete('cascade');
-            $table->foreignId('court_id')->constrained('courts')->onDelete('cascade');
-            $table->integer('rating');
+
+            $table->foreignId('booking_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('venue_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('court_id')->constrained()->cascadeOnDelete();
+
+            $table->unsignedTinyInteger('rating'); // 1–5 lebih efisien
             $table->text('review_text')->nullable();
-            $table->timestamp('created_at')->useCurrent();
+
+            $table->timestamps();
+
+            // 🔥 IMPORTANT: 1 booking = 1 review
+            $table->unique('booking_id');
         });
     }
 

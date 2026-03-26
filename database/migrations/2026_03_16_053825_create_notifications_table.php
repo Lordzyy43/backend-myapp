@@ -13,11 +13,30 @@ return new class extends Migration
     {
         Schema::create('notifications', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
+
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+
+            // 🔥 tipe notif (booking, promo, review, system)
+            $table->string('type');
+
             $table->string('title');
             $table->text('message');
+
+            // 🔥 polymorphic relation (optional, powerful banget)
+            $table->nullableMorphs('notifiable');
+            // notifiable_id + notifiable_type
+
+            // 🔥 optional link (redirect ke frontend)
+            $table->string('action_url')->nullable();
+
+            // 🔥 payload tambahan (json)
+            $table->json('data')->nullable();
+
             $table->boolean('is_read')->default(false);
-            $table->timestamp('created_at')->useCurrent();
+
+            $table->timestamp('read_at')->nullable();
+
+            $table->timestamps();
         });
     }
 
