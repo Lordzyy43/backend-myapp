@@ -13,8 +13,11 @@ return new class extends Migration
     {
         Schema::create('bookings', function (Blueprint $table) {
             $table->id();
+
+            // 🔥 kode unik untuk user / invoice
             $table->string('booking_code')->unique();
 
+            // 🔥 relasi utama
             $table->foreignId('user_id')
                 ->constrained('users')
                 ->cascadeOnDelete();
@@ -23,18 +26,28 @@ return new class extends Migration
                 ->constrained('courts')
                 ->cascadeOnDelete();
 
+            // 🔥 waktu booking
             $table->date('booking_date');
-
             $table->time('start_time');
             $table->time('end_time');
 
+            // 🔥 status booking
             $table->foreignId('status_id')
                 ->constrained('booking_status');
 
-            $table->decimal('total_price', 10, 2);
+            // 🔥 harga aman
+            $table->decimal('total_price', 10, 2)->unsigned();
+
+            // 🔥 AUTO CANCEL SYSTEM (WAJIB)
+            $table->timestamp('expires_at')->nullable();
 
             $table->timestamps();
             $table->softDeletes();
+
+            // 🔥 INDEXING (PERFORMANCE)
+            $table->index(['court_id', 'booking_date']);
+            $table->index(['court_id', 'booking_date', 'start_time', 'end_time']);
+            $table->index(['user_id', 'booking_date']);
         });
     }
 
