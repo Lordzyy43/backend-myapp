@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\BookingStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
@@ -75,20 +76,41 @@ class BookingTimeSlot extends Model
     |--------------------------------------------------------------------------
     */
 
-    // 🔥 cek apakah slot sudah dipakai
+    // 🔥 cek apakah slot sudah dipakai (hanya booking aktif: pending/confirmed)
     public static function isBooked($courtId, $date, $slotIds)
     {
+        $activeStatusIds = [BookingStatus::pending(), BookingStatus::confirmed()];
+
         return self::byCourt($courtId)
             ->byDate($date)
             ->bySlots($slotIds)
+            ->whereHas('booking', function ($q) use ($activeStatusIds) {
+                $q->whereIn('status_id', $activeStatusIds)
+                    ->where(function ($q2) {
+                        $q2->whereNull('expires_at')
+                            ->orWhere('expires_at', '>', now());
+                    });
+            })
             ->exists();
     }
 
-    // 🔥 ambil slot yang sudah terpakai
+    // 🔥 ambil slot yang sudah terpakai (hanya booking aktif: pending/confirmed)
     public static function getBookedSlots($courtId, $date)
     {
-        return self::byCourt($courtId)
-            ->byDate($date)
+        // Pastikan string 'Confirmed' dan 'Pending' sesuai dengan yang ada di Factory
+        $activeStatusIds = BookingStatus::whereIn('status_name', ['Pending', 'Confirmed'])
+            ->pluck('id')
+            ->toArray();
+
+        return self::where('court_id', $courtId)
+            ->where('booking_date', $date) // Coba hilangkan 'Date' kalau tipenya sudah date
+            ->whereHas('booking', function ($q) use ($activeStatusIds) {
+                $q->whereIn('status_id', $activeStatusIds)
+                    ->where(function ($query) {
+                        $query->whereNull('expires_at')
+                            ->orWhere('expires_at', '>=', now()->toDateTimeString()); // Pakai >= dan string
+                    });
+            })
             ->pluck('time_slot_id')
             ->toArray();
     }

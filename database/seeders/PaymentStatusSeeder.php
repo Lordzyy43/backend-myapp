@@ -12,6 +12,7 @@ class PaymentStatusSeeder extends Seeder
         $statuses = [
             'pending',
             'paid',
+            'cancelled',
             'failed',
             'expired',
         ];

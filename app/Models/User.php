@@ -6,9 +6,10 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Laravel\Sanctum\HasApiTokens;
 
-class User extends Authenticatable
+class User extends Authenticatable implements MustVerifyEmail
 {
     use HasApiTokens, HasFactory, Notifiable;
 
@@ -36,59 +37,59 @@ class User extends Authenticatable
     /**
      * RELATIONSHIPS
      */
-
-    // User → Role
     public function role()
     {
         return $this->belongsTo(Role::class);
     }
 
-    // User → Venue (owner)
     public function venues()
     {
         return $this->hasMany(Venue::class, 'owner_id');
     }
 
-    // User → Booking
     public function bookings()
     {
         return $this->hasMany(Booking::class);
     }
 
-    // User → PromoUsage
     public function promoUsages()
     {
         return $this->hasMany(Promo::class);
     }
 
-    // User → Review
     public function reviews()
     {
         return $this->hasMany(Review::class);
     }
 
-    // User → Notification
     public function notifications()
     {
         return $this->hasMany(Notification::class);
     }
 
     /**
-     * HELPER METHODS
+     * 🔥 CORE ROLE CHECK (FLEXIBLE)
      */
-
-    public function isAdmin()
+    public function hasRole(string $roleName): bool
     {
-        return $this->role && $this->role->role_name === 'admin';
+        return optional($this->role)->role_name === $roleName;
     }
 
-    public function isOwner()
+    /**
+     * 🔥 HELPER METHODS (CLEAN)
+     */
+    public function isAdmin(): bool
     {
-        return $this->role && $this->role->role_name === 'owner';
+        return $this->hasRole('admin');
     }
 
-    public function isUser()
+    public function isOwner(): bool
     {
-        return $this->role && $this->role->role_name === 'user';
+        return $this->hasRole('owner');
+    }
+
+    public function isUser(): bool
+    {
+        return $this->hasRole('user');
     }
 }

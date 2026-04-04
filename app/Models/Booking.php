@@ -48,6 +48,7 @@ class Booking extends Model
     public function timeSlots()
     {
         return $this->belongsToMany(TimeSlot::class, 'booking_time_slots')
+            ->withPivot('court_id', 'booking_date')
             ->withTimestamps();
     }
 
@@ -130,8 +131,16 @@ class Booking extends Model
             $this->setExpiry();
             $this->save();
 
+            $pivotData = [];
+            foreach ($slotIds as $id) {
+                $pivotData[$id] = [
+                    'court_id' => $this->court_id,
+                    'booking_date' => $this->booking_date
+                ];
+            }
+
             // 3. attach slot
-            $this->timeSlots()->attach($slotIds);
+            $this->timeSlots()->attach($slotIds, $pivotData);
 
             return $this;
         });
