@@ -32,6 +32,8 @@ return new class extends Migration
             $table->unique(['court_id', 'booking_date', 'time_slot_id']);
 
             $table->index(['court_id', 'booking_date']);
+
+            $table->timestamps();
         });
     }
 

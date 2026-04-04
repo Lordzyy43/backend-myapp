@@ -15,20 +15,34 @@ return new class extends Migration
             $table->id();
 
             $table->foreignId('booking_id')
-                ->constrained('bookings')
+                ->constrained()
                 ->cascadeOnDelete();
 
-            $table->string('payment_method'); // contoh: transfer_bank, qris, ewallet
+            // 🔥 unique: 1 booking = 1 payment (opsional, tergantung bisnis)
+            $table->unique('booking_id');
 
-            $table->decimal('amount', 10, 2);
+            // 🔥 metode pembayaran
+            $table->string('payment_method');
+            // transfer_bank, qris, ewallet, dll
 
+            $table->decimal('amount', 12, 2);
+
+            // 🔥 reference dari gateway (midtrans, xendit, dll)
+            $table->string('transaction_id')->nullable();
+
+            // 🔥 bukti pembayaran manual
             $table->string('payment_proof')->nullable();
-            // path bukti transfer / screenshot pembayaran
 
             $table->foreignId('payment_status_id')
-                ->constrained('payment_status');
+                ->constrained('payment_status')
+                ->cascadeOnDelete();
 
+            // 🔥 waktu bayar & expiry pembayaran
             $table->timestamp('paid_at')->nullable();
+            $table->timestamp('expired_at')->nullable();
+
+            // 🔥 payload response dari gateway (json)
+            $table->json('payload')->nullable();
 
             $table->timestamps();
         });

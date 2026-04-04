@@ -50,9 +50,13 @@ class Promo extends Model
             : $this->discount_value;
     }
 
-    // 🔥 Increment used count setelah berhasil dipakai
-    public function markUsed(): void
+    // 🔥 Increment used count setelah berhasil dipakai (jaga limit)
+    public function markUsed(): bool
     {
-        $this->increment('used_count');
+        if ($this->usage_limit && $this->used_count >= $this->usage_limit) {
+            return false;
+        }
+
+        return $this->increment('used_count');
     }
 }

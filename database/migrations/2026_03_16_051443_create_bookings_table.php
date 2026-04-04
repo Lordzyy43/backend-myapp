@@ -26,28 +26,36 @@ return new class extends Migration
                 ->constrained('courts')
                 ->cascadeOnDelete();
 
-            // 🔥 waktu booking
+            // 🔥 tanggal booking (slot ada di pivot)
             $table->date('booking_date');
-            $table->time('start_time');
-            $table->time('end_time');
 
             // 🔥 status booking
             $table->foreignId('status_id')
                 ->constrained('booking_status');
 
-            // 🔥 harga aman
+            // 🔥 harga total dari slot
             $table->decimal('total_price', 10, 2)->unsigned();
 
-            // 🔥 AUTO CANCEL SYSTEM (WAJIB)
+            // 🔥 AUTO CANCEL SYSTEM
             $table->timestamp('expires_at')->nullable();
 
             $table->timestamps();
             $table->softDeletes();
 
-            // 🔥 INDEXING (PERFORMANCE)
+            /*
+            |--------------------------------------------------------------------------
+            | INDEXING (OPTIMIZED FOR SLOT SYSTEM)
+            |--------------------------------------------------------------------------
+            */
+
+            // 🔥 untuk cek availability cepat
             $table->index(['court_id', 'booking_date']);
-            $table->index(['court_id', 'booking_date', 'start_time', 'end_time']);
+
+            // 🔥 untuk history user
             $table->index(['user_id', 'booking_date']);
+
+            // 🔥 untuk filtering status (dashboard / admin)
+            $table->index(['status_id']);
         });
     }
 

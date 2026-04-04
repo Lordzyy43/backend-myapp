@@ -12,8 +12,6 @@ class Role extends Model
         'role_name',
     ];
 
-    public $timestamps = false;
-
     /**
      * Relasi: Role punya banyak User
      */

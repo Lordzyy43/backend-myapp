@@ -5,34 +5,61 @@ namespace App\Console\Commands;
 use Illuminate\Console\Command;
 use App\Models\Booking;
 use App\Models\BookingStatus;
+use App\Models\PaymentStatus;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class ExpireBookings extends Command
 {
-  // Nama command yang bakal dipanggil via cron: php artisan booking:expire
   protected $signature = 'booking:expire';
-  protected $description = 'Auto expire pending bookings and release slots';
+  protected $description = 'Auto expire pending bookings + sync payment + release slot';
 
   public function handle()
   {
-    // Ambil semua booking pending yang udah melewati waktu expires_at
-    $expiredBookings = Booking::where('status_id', BookingStatus::pending())
+    Booking::where('status_id', BookingStatus::pending())
       ->where('expires_at', '<=', now())
-      ->get();
+      ->chunkById(50, function ($bookings) {
 
-    if ($expiredBookings->isEmpty()) {
-      $this->info('No pending bookings to expire.');
-      return;
-    }
+        foreach ($bookings as $booking) {
 
-    foreach ($expiredBookings as $booking) {
-      // Update status ke expired
-      $booking->status_id = BookingStatus::expired();
-      $booking->save();
+          DB::transaction(function () use ($booking) {
 
-      // Release slot supaya bisa dibooking orang lain
-      $booking->timeSlots()->detach();
-    }
+            // 🔥 lock row langsung
+            $booking = Booking::lockForUpdate()
+              ->with(['payment', 'timeSlots'])
+              ->find($booking->id);
 
-    $this->info('Expired bookings processed: ' . $expiredBookings->count());
+            if (!$booking || $booking->status_id !== BookingStatus::pending()) {
+              return;
+            }
+
+            // 🔥 update booking
+            $booking->update([
+              'status_id' => BookingStatus::expired()
+            ]);
+
+            // 🔥 release slot
+            $booking->timeSlots()->detach();
+
+            // 🔥 sync payment
+            if ($booking->payment && !$booking->payment->isPaid()) {
+
+              $booking->payment->update([
+                'payment_status_id' => PaymentStatus::expired(),
+                'expired_at' => now()
+              ]);
+
+              event(new \App\Events\PaymentExpired($booking->payment));
+            }
+
+            // 🔥 booking event
+            event(new \App\Events\BookingExpired($booking));
+
+            Log::info("Booking expired: {$booking->id}");
+          });
+        }
+      });
+
+    $this->info('Expire process completed');
   }
 }

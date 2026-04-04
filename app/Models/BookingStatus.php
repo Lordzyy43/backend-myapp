@@ -48,4 +48,9 @@ class BookingStatus extends Model
     {
         return self::where('status_name', 'expired')->value('id');
     }
+
+    public static function finished()
+    {
+        return self::where('status_name', 'finished')->value('id');
+    }
 }

@@ -14,6 +14,7 @@ class BookingStatusSeeder extends Seeder
             'confirmed',
             'cancelled',
             'expired',
+            'finished',
         ];
 
         foreach ($statuses as $status) {

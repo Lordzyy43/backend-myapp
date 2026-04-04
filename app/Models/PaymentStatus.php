@@ -39,8 +39,18 @@ class PaymentStatus extends Model
         return self::where('status_name', 'paid')->value('id');
     }
 
+    public static function cancelled()
+    {
+        return self::where('status_name', 'cancelled')->value('id');
+    }
+
     public static function failed()
     {
         return self::where('status_name', 'failed')->value('id');
+    }
+
+    public static function expired()
+    {
+        return self::where('status_name', 'expired')->value('id');
     }
 }
