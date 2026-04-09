@@ -31,10 +31,17 @@ class UserFactory extends Factory
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
             // Tambahkan baris di bawah ini:
-            'role_id' => \App\Models\Role::where('role_name', 'user')->first()?->id?? 1,
+            'role_id' => \App\Models\Role::where('role_name', 'user')->first()?->id,
         ];
     }
 
+    // Tambahkan state khusus Admin
+    public function admin(): static
+    {
+        return $this->state(fn(array $attributes) => [
+            'role_id' => \App\Models\Role::where('role_name', 'admin')->first()?->id,
+        ]);
+    }
     /**
      * Indicate that the model's email address should be unverified.
      */

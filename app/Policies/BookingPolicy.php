@@ -4,69 +4,80 @@ namespace App\Policies;
 
 use App\Models\User;
 use App\Models\Booking;
-use App\Models\BookingStatus;
 
 class BookingPolicy
 {
     /**
-     * 🔥 VIEW BOOKING
+     * Helper untuk cek apakah user adalah admin
+     */
+    private function isAdmin(User $user): bool
+    {
+        // Gunakan optional() atau null safe operator jika role bisa null
+        return $user->role?->role_name === 'admin';
+    }
+
+    /**
+     * Helper untuk cek apakah user adalah pemilik booking
+     */
+    private function isOwner(User $user, Booking $booking): bool
+    {
+        return $booking->user_id === $user->id;
+    }
+
+    /**
+     * VIEW ANY (Laporan/List Admin)
+     */
+    public function viewAny(User $user): bool
+    {
+        return $this->isAdmin($user);
+    }
+
+    /**
+     * VIEW DETAIL
      */
     public function view(User $user, Booking $booking): bool
     {
-        // user boleh lihat miliknya
-        if ($booking->user_id === $user->id) {
-            return true;
-        }
-
-        // admin boleh lihat semua
-        return $user->role->role_name === 'admin';
+        return $this->isAdmin($user) || $this->isOwner($user, $booking);
     }
 
     /**
-     * 🔥 CANCEL (USER)
+     * CANCEL (User & Admin)
+     * Kita bebaskan aksesnya di sini, validasi status id ada di Service.
      */
     public function cancel(User $user, Booking $booking): bool
     {
-        return $booking->user_id === $user->id
-            && in_array($booking->status_id, [
-                BookingStatus::pending(),
-                BookingStatus::confirmed()
-            ]);
+        return $this->isAdmin($user) || $this->isOwner($user, $booking);
     }
 
     /**
-     * 🔥 APPROVE (ADMIN)
+     * APPROVE (Admin Only)
      */
     public function approve(User $user, Booking $booking): bool
     {
-        return $user->role->role_name === 'admin'
-            && $booking->status_id === BookingStatus::pending();
+        return $this->isAdmin($user);
     }
 
     /**
-     * 🔥 REJECT (ADMIN)
+     * REJECT (Admin Only)
      */
     public function reject(User $user, Booking $booking): bool
     {
-        return $user->role->role_name === 'admin'
-            && $booking->status_id === BookingStatus::pending();
+        return $this->isAdmin($user);
     }
 
     /**
-     * 🔥 FINISH (ADMIN)
+     * FINISH (Admin Only)
      */
     public function finish(User $user, Booking $booking): bool
     {
-        return $user->role->role_name === 'admin'
-            && $booking->status_id === BookingStatus::confirmed();
+        return $this->isAdmin($user);
     }
 
     /**
-     * 🔥 PAY (USER)
+     * PAY (Owner Only)
      */
     public function pay(User $user, Booking $booking): bool
     {
-        return $booking->user_id === $user->id
-            && $booking->status_id === BookingStatus::pending();
+        return $this->isOwner($user, $booking);
     }
 }

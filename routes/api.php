@@ -129,6 +129,7 @@ Route::prefix('v1')->group(function () {
     Route::get('/payments/{id}', [PaymentController::class, 'show']);
     Route::post('/payments', [PaymentController::class, 'store']);
     Route::patch('/payments/{id}/cancel', [PaymentController::class, 'cancel']);
+    Route::patch('/payments/{id}/confirm', [PaymentController::class, 'confirm']); // optional
     Route::get('/notifications', [NotificationController::class, 'index']);
 
     /*
@@ -164,6 +165,7 @@ Route::prefix('v1')->group(function () {
       |--------------------------------------------------------------------------
       */
       Route::prefix('bookings')->group(function () {
+        Route::get('/', [AdminBookingController::class, 'index']);
         Route::get('/reports', [AdminBookingController::class, 'report']);
         Route::patch('/{id}/approve', [AdminBookingController::class, 'approve']);
         Route::patch('/{id}/reject', [AdminBookingController::class, 'reject']);

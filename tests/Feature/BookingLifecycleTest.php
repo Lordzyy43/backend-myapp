@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use Tests\TestCase;
 use App\Models\User;
+use App\Models\Role;
 use App\Models\Booking;
 use App\Models\BookingStatus;
 use App\Models\Court;
@@ -26,29 +27,46 @@ class BookingLifecycleTest extends TestCase
   {
     parent::setUp();
 
-    // Create test data
-    $sport = Sport::create(['name' => 'Basketball']);
-    $venue = Venue::create([
-      'name' => 'Test Venue',
+    // 1. SEEDER STATUS (firstOrCreate agar tidak bentrok)
+    $statuses = ['pending', 'confirmed', 'cancelled', 'expired', 'finished'];
+    foreach ($statuses as $status) {
+      BookingStatus::firstOrCreate(['status_name' => $status]);
+    }
+
+    // 2. CREATE ACTORS (Gunakan role_id, Hapus kolom 'role')
+    $adminRole = \App\Models\Role::firstOrCreate(['role_name' => 'admin']);
+    // Sesuaikan angka 1, 2, 3 dengan role_id yang kamu punya di database
+    $this->admin = User::factory()->create(['role_id' => 1]);
+    $this->owner = User::factory()->create(['role_id' => 2]);
+    $this->user = User::factory()->create(['role_id' => 3]);
+
+    // 3. CREATE INFRASTRUCTURE
+    $sport = Sport::firstOrCreate(['name' => 'Basketball']);
+
+    $this->venue = Venue::create([
+      'owner_id' => $this->owner->id,
       'sport_id' => $sport->id,
+      'name' => 'Test Venue',
       'address' => 'Test Address',
-      'phone' => '123456789',
-      'email' => 'venue@test.com'
+      'city' => 'Semarang',
+      'phone' => '08123456789',
+      'email' => 'venue' . rand(1, 99) . '@test.com',
+      'slug' => 'test-venue-' . strtolower(bin2hex(random_bytes(3)))
     ]);
 
     $this->court = Court::create([
-      'venue_id' => $venue->id,
+      'venue_id' => $this->venue->id,
+      'sport_id' => $sport->id,
       'name' => 'Court 1',
       'price_per_hour' => 50000,
-      'description' => 'Test court'
+      'description' => 'Test court',
+      'slug' => 'court-1-' . strtolower(bin2hex(random_bytes(3)))
     ]);
 
     $this->timeSlots = collect([
-      TimeSlot::create(['start_time' => '08:00', 'end_time' => '09:00', 'order_index' => 1, 'is_active' => true]),
-      TimeSlot::create(['start_time' => '09:00', 'end_time' => '10:00', 'order_index' => 2, 'is_active' => true]),
+      TimeSlot::firstOrCreate(['start_time' => '08:00', 'end_time' => '09:00', 'order_index' => 1, 'is_active' => true]),
+      TimeSlot::firstOrCreate(['start_time' => '09:00', 'end_time' => '10:00', 'order_index' => 2, 'is_active' => true]),
     ]);
-
-    $this->user = User::factory()->create();
   }
 
   #[Test]
@@ -68,14 +86,16 @@ class BookingLifecycleTest extends TestCase
         'success',
         'message',
         'data' => [
-          'id',
-          'booking_code',
-          'user_id',
-          'court_id',
-          'booking_date',
-          'status_id',
-          'total_price',
-          'expires_at'
+          'booking' => [
+            'id',
+            'booking_code',
+            'user_id',
+            'court_id',
+            'booking_date',
+            'status_id',
+            'total_price',
+            'expires_at'
+          ]
         ]
       ]);
 
@@ -106,31 +126,44 @@ class BookingLifecycleTest extends TestCase
     $response = $this->actingAs($user2, 'sanctum')
       ->postJson('/api/v1/bookings', $data);
 
-    $response->assertStatus(400)
+    $response->assertStatus(422)
       ->assertJson([
         'success' => false,
-        'message' => 'Slot sudah dibooking'
+        'message' => 'Validation failed',
+        'errors' => [
+          'slot_ids' =>['Slot sudah dibooking']
+        ]
       ]);
   }
 
   #[Test]
   public function admin_can_approve_pending_booking()
   {
-    // Create booking
+    // 1. Pastikan Role Admin ada di DB Testing (Pakai firstOrCreate biar gak duplicate error)
+    $adminRole = \App\Models\Role::firstOrCreate(['role_name' => 'admin']);
+
+    // 2. Buat booking (pake data yang sudah ada di setUp)
     $booking = Booking::create([
-      'user_id' => $this->user->id,
-      'court_id' => $this->court->id,
+      'user_id'      => $this->user->id,
+      'court_id'     => $this->court->id,
       'booking_date' => now()->addDays(1)->toDateString(),
-      'status_id' => BookingStatus::pending(),
-      'total_price' => 50000
+      'status_id'    => BookingStatus::pending(),
+      'total_price'  => 50000
     ]);
 
-    $admin = User::factory()->create();
-    $admin->role_id = 1; // Assume admin role
+    // 3. Buat Admin dengan cara yang BENAR (langsung inject role_id saat create)
+    $admin = User::factory()->create([
+      'role_id' => $adminRole->id
+    ]);
 
+    // 4. LOAD RELASI (Ini wajib biar method $admin->isAdmin() di middleware bisa baca nama rolenya)
+    $admin->load('role');
+
+    // 5. Eksekusi
     $response = $this->actingAs($admin, 'sanctum')
       ->patchJson("/api/v1/admin/bookings/{$booking->id}/approve");
 
+    // 6. Assertions
     $response->assertStatus(200)
       ->assertJson([
         'success' => true,
@@ -138,7 +171,7 @@ class BookingLifecycleTest extends TestCase
       ]);
 
     $this->assertDatabaseHas('bookings', [
-      'id' => $booking->id,
+      'id'        => $booking->id,
       'status_id' => BookingStatus::confirmed()
     ]);
   }
@@ -160,8 +193,9 @@ class BookingLifecycleTest extends TestCase
       'booking_date' => $booking->booking_date
     ]);
 
-    $admin = User::factory()->create();
-    $admin->role_id = 1;
+    $adminRole = Role::where('role_name', 'admin')->first();
+    $admin = User::factory()->create(['role_id' => $adminRole->id]);
+    $admin->load('role');
 
     $response = $this->actingAs($admin, 'sanctum')
       ->patchJson("/api/v1/admin/bookings/{$booking->id}/reject");
@@ -190,8 +224,9 @@ class BookingLifecycleTest extends TestCase
       'total_price' => 50000
     ]);
 
-    $admin = User::factory()->create();
-    $admin->role_id = 1;
+    $adminRole = Role::where('role_name', 'admin')->first();
+    $admin = User::factory()->create(['role_id' => $adminRole->id]);
+    $admin->load('role');
 
     $response = $this->actingAs($admin, 'sanctum')
       ->patchJson("/api/v1/admin/bookings/{$booking->id}/finish");
@@ -296,7 +331,7 @@ class BookingLifecycleTest extends TestCase
     $response = $this->actingAs($this->user, 'sanctum')
       ->postJson('/api/v1/bookings', $data);
 
-    $response->assertStatus(400);
+    $response->assertUnprocessable();
   }
 
   #[Test]
@@ -311,7 +346,7 @@ class BookingLifecycleTest extends TestCase
     $response = $this->actingAs($this->user, 'sanctum')
       ->postJson('/api/v1/bookings', $data);
 
-    $response->assertStatus(400);
+    $response->assertUnprocessable();
   }
 
   #[Test]
@@ -331,24 +366,32 @@ class BookingLifecycleTest extends TestCase
         'success',
         'message',
         'data' => [
-          '*' => [
-            'id',
-            'booking_code',
-            'court',
-            'timeSlots',
-            'status'
+          'bookings' => [
+            '*' => [
+              'id',
+              'booking_code',
+              'user_id',
+              'court_id',
+              'booking_date',
+              'status_id',
+              'total_price',
+              'promo_code',
+              'discount',
+              'final_price',
+              'court'
+            ]
+          ],
+          'meta' => [
+            'current_page',
+            'last_page',
+            'per_page',
+            'total'
           ]
-        ],
-        'meta' => [
-          'current_page',
-          'last_page',
-          'per_page',
-          'total'
         ]
       ]);
 
     // Should only return 3 bookings for this user
-    $this->assertCount(3, $response->json('data'));
+    $this->assertCount(3, $response->json('data.bookings'));
   }
 
   #[Test]
@@ -366,7 +409,7 @@ class BookingLifecycleTest extends TestCase
           'id',
           'booking_code',
           'court',
-          'timeSlots',
+          'time_slots',
           'status'
         ]
       ]);
@@ -389,16 +432,17 @@ class BookingLifecycleTest extends TestCase
     Booking::factory()->count(5)->create();
     Booking::factory()->create(['status_id' => BookingStatus::confirmed()]);
 
-    $admin = User::factory()->create();
-    $admin->role_id = 1;
+    $adminRole = Role::where('role_name', 'admin')->first();
+    $admin = User::factory()->create(['role_id' => $adminRole->id]);
+    $admin->load('role');
 
     $response = $this->actingAs($admin, 'sanctum')
-      ->getJson('/api/v1/admin/reports/bookings?status_id=' . BookingStatus::confirmed());
+      ->getJson('/api/v1/admin/bookings/reports?status_id=' . BookingStatus::confirmed());
 
     $response->assertStatus(200);
 
     // Should only return confirmed bookings
-    $data = $response->json('data');
+    $data = $response->json('data.data');
     $this->assertCount(1, $data);
     $this->assertEquals(BookingStatus::confirmed(), $data[0]['status_id']);
   }

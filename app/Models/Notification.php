@@ -42,6 +42,11 @@ class Notification extends Model
         return $this->morphTo();
     }
 
+    public function getBookingIdAttribute()
+    {
+        return $this->notifiable_id;
+    }
+
     /*
     | HELPER
     */

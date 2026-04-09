@@ -214,7 +214,7 @@ class SecurityTest extends TestCase
     $response->assertStatus(200);
 
     // Check if throttle middleware is applied in routes
-    $this->assertContains('throttle:60,1', file_get_contents(base_path('routes/api.php')));
+    $this->assertStringContainsString('throttle:60,1', file_get_contents(base_path('routes/api.php')));
   }
 
   #[Test]

@@ -4,125 +4,158 @@ namespace App\Http\Controllers\API\V1\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
+use App\Models\User;
 use App\Services\BookingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Http\JsonResponse;
 
 class BookingController extends Controller
 {
-  /**
-   * Helper biar gak repeat logic
-   */
-  protected function handleAction($id, string $method, string $successMessage)
+  use AuthorizesRequests;
+
+  protected $bookingService;
+
+  // Gunakan Dependency Injection agar lebih testable
+  public function __construct(BookingService $bookingService)
   {
-    $booking = Booking::with(['user', 'court', 'timeSlots', 'status'])
-      ->findOrFail($id);
-
-    // 🔥 Authorization (WAJIB untuk clean architecture)
-    $this->authorize($method, $booking);
-
-    try {
-      $service = new BookingService();
-      $result = $service->{$method}($booking);
-
-      Log::info("Booking {$method} by admin", [
-        'booking_id' => $booking->id,
-        'admin_id' => auth()->id(),
-      ]);
-
-      return $this->success($result, $successMessage);
-    } catch (\Exception $e) {
-      Log::error("Booking {$method} failed", [
-        'booking_id' => $booking->id,
-        'error' => $e->getMessage(),
-      ]);
-
-      return $this->error($e->getMessage(), null, 400);
-    }
+    $this->bookingService = $bookingService;
   }
 
   /**
-   * APPROVE
+   * CORE LOGIC: Handle Action (Approve/Reject/Finish)
+   * Kita buat lebih detail dengan Database Transaction & Specific Logging
    */
+  protected function handleAction($id, string $method, string $successMessage): JsonResponse
+  {
+    // Gunakan lockForUpdate jika aplikasi skala besar untuk cegah race condition
+    $booking = Booking::with(['user', 'court', 'timeSlots', 'status'])
+      ->findOrFail($id);
+
+    // Authorization via Policy (e.g., BookingPolicy)
+    $this->authorize($method, $booking);
+
+    return DB::transaction(function () use ($booking, $method, $successMessage) {
+      try {
+        // Eksekusi logic di Service
+        $result = $this->bookingService->{$method}($booking);
+
+        Log::info("Booking Action Successful", [
+          'action'    => $method,
+          'booking_id' => $booking->id,
+          'admin_id'  => auth()->id(),
+          'timestamp' => now()->toDateTimeString()
+        ]);
+
+        return $this->success($result, $successMessage);
+      } catch (\Exception $e) {
+        DB::rollBack();
+        Log::error("Booking Action Failed", [
+          'action'    => $method,
+          'booking_id' => $booking->id,
+          'error'     => $e->getMessage(),
+          'trace'     => $e->getTraceAsString()
+        ]);
+
+        return $this->error("Gagal melakukan aksi {$method}: " . $e->getMessage(), null, 422);
+      }
+    });
+  }
+
+  public function index()
+  {
+    $bookings = \App\Models\Booking::with(['user', 'court', 'status'])->get();
+    return response()->json([
+      'success' => true,
+      'data' => ['bookings' => $bookings]
+    ]);
+  }
+
   public function approve($id)
   {
     return $this->handleAction($id, 'approve', 'Booking berhasil di-approve');
   }
-
-  /**
-   * REJECT
-   */
   public function reject($id)
   {
-    return $this->handleAction($id, 'reject', 'Booking berhasil ditolak');
+    return $this->handleAction($id, 'reject', 'Booking berhasil di-reject');
   }
-
-  /**
-   * FINISH
-   */
   public function finish($id)
   {
-    return $this->handleAction($id, 'finish', 'Booking berhasil diselesaikan');
+    return $this->handleAction($id, 'finish', 'Booking berhasil di-selesaikan');
   }
 
   /**
-   * REPORT BOOKING
+   * REPORT & MONITORING
+   * Ditambahkan filtering date range dan sorting
    */
-  public function report(Request $request)
+  public function report(Request $request): JsonResponse
   {
-    $query = Booking::with(['user', 'court', 'status']);
+    $this->authorize('viewAny', Booking::class);
 
-    if ($request->filled('status_id')) {
-      $query->where('status_id', $request->status_id);
-    }
+    $query = Booking::with(['user:id,name,email', 'court:id,name', 'status:id,name']);
 
-    if ($request->filled('date')) {
-      $query->whereDate('booking_date', $request->date);
-    }
+    // Filter Berdasarkan Status
+    $query->when($request->status_id, function ($q) use ($request) {
+      $q->where('status_id', $request->status_id);
+    });
 
-    $bookings = $query->latest()->paginate(10);
+    // Filter Rentang Tanggal (Start & End Date)
+    $query->when($request->start_date && $request->end_date, function ($q) use ($request) {
+      $q->whereBetween('booking_date', [$request->start_date, $request->end_date]);
+    }, function ($q) use ($request) {
+      // Default filter single date jika start/end tidak ada
+      $q->when($request->date, fn($query) => $query->whereDate('booking_date', $request->date));
+    });
+
+    $bookings = $query->latest()->paginate($request->get('per_page', 10));
 
     return $this->success([
-      'bookings' => $bookings->items(),
-      'meta' => [
+      'data' => $bookings->items(),
+      'pagination' => [
+        'total'        => $bookings->total(),
+        'per_page'     => $bookings->perPage(),
         'current_page' => $bookings->currentPage(),
-        'last_page' => $bookings->lastPage(),
-        'per_page' => $bookings->perPage(),
-        'total' => $bookings->total(),
+        'last_page'    => $bookings->lastPage(),
       ]
-    ], 'Report booking berhasil diambil');
+    ], 'Data laporan booking berhasil ditarik');
   }
 
   /**
-   * USER MANAGEMENT
+   * ADVANCED USER MANAGEMENT
+   * Search lebih powerful (nama, email, role)
    */
-  public function usersIndex(Request $request)
+  public function usersIndex(Request $request): JsonResponse
   {
-    $query = \App\Models\User::with(['role']);
+    $this->authorize('viewAny', User::class);
 
-    if ($request->filled('role')) {
-      $query->whereHas('role', function ($q) use ($request) {
-        $q->where('role_name', $request->role);
+    $query = User::with(['role:id,role_name']);
+
+    // Search multikolom
+    $query->when($request->search, function ($q) use ($request) {
+      $search = $request->search;
+      $q->where(function ($sub) use ($search) {
+        $sub->where('name', 'like', "%{$search}%")
+          ->orWhere('email', 'like', "%{$search}%");
       });
-    }
+    });
 
-    if ($request->filled('search')) {
-      $query->where(function ($q) use ($request) {
-        $q->where('name', 'like', '%' . $request->search . '%')
-          ->orWhere('email', 'like', '%' . $request->search . '%');
-      });
-    }
+    // Filter Role
+    $query->when($request->role, function ($q) use ($request) {
+      $q->whereHas('role', fn($sub) => $sub->where('role_name', $request->role));
+    });
 
-    $users = $query->latest()->paginate(10);
+    $users = $query->latest()->paginate($request->get('per_page', 10));
 
     return $this->success([
       'data' => $users->items(),
-      'meta' => [
+      'pagination' => [
+        'total'        => $users->total(),
+        'per_page'     => $users->perPage(),
         'current_page' => $users->currentPage(),
-        'last_page' => $users->lastPage(),
-        'per_page' => $users->perPage(),
-        'total' => $users->total(),
+        'last_page'    => $users->lastPage(),
       ]
-    ], 'Users berhasil diambil');
+    ], 'Daftar pengguna berhasil dimuat');
   }
 }

@@ -45,6 +45,8 @@ return new class extends Migration
             $table->json('payload')->nullable();
 
             $table->timestamps();
+
+            $table->index(['booking_id', 'payment_status_id'], 'payments_booking_status_idx');
         });
     }
 

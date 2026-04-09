@@ -45,9 +45,10 @@ class Promo extends Model
     {
         if (!$this->isValid()) return 0;
 
-        return $this->discount_type === 'percentage'
+        $discount = $this->discount_type === 'percentage'
             ? ($totalAmount * $this->discount_value / 100)
             : $this->discount_value;
+        return min($discount, $totalAmount); // Diskon tidak boleh melebihi total
     }
 
     // 🔥 Increment used count setelah berhasil dipakai (jaga limit)

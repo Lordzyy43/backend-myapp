@@ -18,31 +18,76 @@ class Booking extends Model
         'booking_date',
         'status_id',
         'total_price',
+        'promo_code',
+        'discount',
+        'discount_percentage', // Sudah benar ada di sini
+        'final_price',
         'expires_at',
     ];
 
     protected $casts = [
         'booking_date' => 'date',
-        'expires_at' => 'datetime',
+        'expires_at'   => 'datetime',
+        'total_price'  => 'float',
+        'discount'     => 'float',
+        'discount_percentage' => 'integer',
+        'final_price'  => 'float',
+    ];
+
+    /**
+     * 🔥 PENTING UNTUK TEST:
+     * Menambahkan key agar muncul di response JSON secara otomatis.
+     */
+    protected $appends = [
+        'discount_amount',
+        'discount_percentage_display'
     ];
 
     /*
+    |--------------------------------------------------------------------------
+    | ACCESSORS & MUTATORS
+    |--------------------------------------------------------------------------
+    */
+
+    // Mengarahkan discount_amount ke field discount (Sesuai ekspektasi PromoTest)
+    public function getDiscountAmountAttribute(): float
+    {
+        return (float) ($this->attributes['discount'] ?? 0);
+    }
+
+    // Memperbaiki typo ?? sebelumnya agar tidak error
+    public function getDiscountPercentageDisplayAttribute(): int
+    {
+        return (int) ($this->attributes['discount_percentage'] ?? 0);
+    }
+
+    // Pastikan final_price tidak pernah null (fallback ke total_price)
+    public function getFinalPriceAttribute($value): float
+    {
+        return (float) ($value ?? $this->total_price ?? 0);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
     | RELATIONS
+    |--------------------------------------------------------------------------
     */
 
     public function user()
     {
         return $this->belongsTo(User::class);
     }
-
     public function court()
     {
         return $this->belongsTo(Court::class);
     }
-
     public function status()
     {
         return $this->belongsTo(BookingStatus::class, 'status_id');
+    }
+    public function payment()
+    {
+        return $this->hasOne(Payment::class);
     }
 
     public function timeSlots()
@@ -52,19 +97,25 @@ class Booking extends Model
             ->withTimestamps();
     }
 
-    public function payment()
-    {
-        return $this->hasOne(Payment::class);
-    }
-
     /*
-    | BOOT
+    |--------------------------------------------------------------------------
+    | BUSINESS LOGIC
+    |--------------------------------------------------------------------------
     */
 
     protected static function booted()
     {
         static::creating(function ($booking) {
-            $booking->booking_code = self::generateBookingCode();
+            if (empty($booking->booking_code)) {
+                $booking->booking_code = self::generateBookingCode();
+            }
+
+            // 🔥 LOGIC TAMBAHAN: Pastikan final_price terisi otomatis jika ada diskon
+            if (isset($booking->discount) && $booking->discount > 0) {
+                $booking->final_price = max(0, $booking->total_price - $booking->discount);
+            } elseif (empty($booking->final_price)) {
+                $booking->final_price = $booking->total_price;
+            }
         });
     }
 
@@ -73,11 +124,6 @@ class Booking extends Model
         return 'BOOK-' . now()->format('Ymd') . '-' . strtoupper(Str::random(5));
     }
 
-    /*
-    | BUSINESS LOGIC
-    */
-
-    // 🔥 VALIDASI SLOT (ANTI TABRAKAN)
     public static function isSlotAvailable($courtId, $date, $slotIds)
     {
         return !BookingTimeSlot::where('court_id', $courtId)
@@ -86,48 +132,45 @@ class Booking extends Model
             ->exists();
     }
 
-    // 🔥 HITUNG TOTAL
-    public function calculateTotalPrice($slotIds)
+    public function calculateTotalPrice($slotIds): int
     {
-        $slots = TimeSlot::whereIn('id', $slotIds)->count();
-
-        return $slots * $this->court->price_per_hour;
+        $slotsCount = count($slotIds);
+        // Load relation if not present to avoid null errors
+        $price = $this->court ? $this->court->price_per_hour : 0;
+        return $slotsCount * $price;
     }
 
-    // 🔥 SET EXPIRY
     public function setExpiry(int $minutes = 10): void
     {
         $this->expires_at = now()->addMinutes($minutes);
     }
 
-    // 🔥 CHECK EXPIRED
     public function isExpired(): bool
     {
-        if (!$this->expires_at) {
-            return false;
-        }
-
-        return now()->greaterThanOrEqualTo($this->expires_at);
+        return $this->expires_at ? now()->greaterThanOrEqualTo($this->expires_at) : false;
     }
 
-    // 🔥 CHECK MASIH AKTIF (INI YANG SERING DIPAKAI)
-    public function isActive(): bool
+    public function bookSlots($slotIds, $promoData = null)
     {
-        return !$this->isExpired();
-    }
-
-    // 🔥 CORE BOOKING PROCESS (ANTI RUSAK)
-    public function bookSlots($slotIds)
-    {
-        return DB::transaction(function () use ($slotIds) {
-
-            // 1. cek ketersediaan
+        return DB::transaction(function () use ($slotIds, $promoData) {
             if (!self::isSlotAvailable($this->court_id, $this->booking_date, $slotIds)) {
                 throw new \Exception('Slot already booked');
             }
 
-            // 2. hitung harga
             $this->total_price = $this->calculateTotalPrice($slotIds);
+
+            if ($promoData) {
+                $this->promo_code = $promoData['code'];
+                $this->discount = $promoData['discount'];
+                // 🔥 Pastikan menyimpan percentage jika ada dalam data promo
+                $this->discount_percentage = $promoData['percentage'] ?? 0;
+                $this->final_price = max(0, $this->total_price - $promoData['discount']);
+            } else {
+                $this->final_price = $this->total_price;
+                $this->discount = 0;
+                $this->discount_percentage = 0;
+            }
+
             $this->setExpiry();
             $this->save();
 
@@ -138,8 +181,6 @@ class Booking extends Model
                     'booking_date' => $this->booking_date
                 ];
             }
-
-            // 3. attach slot
             $this->timeSlots()->attach($slotIds, $pivotData);
 
             return $this;

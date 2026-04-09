@@ -43,7 +43,7 @@ class AvailabilityController extends Controller
             ->whereDate('end_date', '>=', $dateStr)
             ->exists();
 
-        $cacheKey = "availability:{$court->id}:{$dateStr}";
+        $cacheKey = "availability_{$court->id}_{$dateStr}";
 
         // Logic Utama dalam Closure agar bisa dipakai Cache atau Direct
         $fetchLogic = function () use ($court, $date, $dateStr, $today, $now, $isMaintenance, $operating) {
