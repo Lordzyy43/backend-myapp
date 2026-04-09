@@ -15,32 +15,17 @@ class NotificationController extends Controller
     public function index(Request $request)
     {
         $user = auth()->user();
-
         $query = Notification::where('user_id', $user->id);
 
-        // 🔥 FILTER UNREAD
-        if ($request->boolean('unread')) {
-            $query->where('is_read', false);
-        }
+        if ($request->boolean('unread')) $query->where('is_read', false);
+        if ($request->filled('type')) $query->where('type', $request->type);
 
-        // 🔥 FILTER TYPE
-        if ($request->filled('type')) {
-            $query->where('type', $request->type);
-        }
+        $notifications = $query->latest()->paginate($request->get('per_page', 10));
 
-        $notifications = $query
-            ->latest()
-            ->paginate($request->get('per_page', 10));
-
+        // JANGAN pakai ->items(), kirim langsung $notifications
         return $this->success([
-            'notifications' => $notifications->items(),
-            'meta' => [
-                'current_page' => $notifications->currentPage(),
-                'last_page' => $notifications->lastPage(),
-                'per_page' => $notifications->perPage(),
-                'total' => $notifications->total(),
-            ]
-        ], 'List notifikasi berhasil diambil', 200);
+            'notifications' => $notifications
+        ], 'List notifikasi berhasil diambil');
     }
 
     /**

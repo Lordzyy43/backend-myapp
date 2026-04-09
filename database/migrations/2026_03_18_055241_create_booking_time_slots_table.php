@@ -28,10 +28,11 @@ return new class extends Migration
                 ->constrained('time_slots')
                 ->cascadeOnDelete();
 
-            // 🔥 ANTI DOUBLE BOOKING (INI KUNCI)
-            $table->unique(['court_id', 'booking_date', 'time_slot_id']);
+            // 🔥 ANTI DOUBLE BOOKING (KUNCI UTAMA)
+            $table->unique(['court_id', 'booking_date', 'time_slot_id'], 'court_date_slot_unique');
 
-            $table->index(['court_id', 'booking_date']);
+            // 🔥 INDEX UNTUK SEARCH CEPAT (Pilih salah satu saja)
+            $table->index(['court_id', 'booking_date'], 'booking_time_slots_booking_time_idx');
 
             $table->timestamps();
         });

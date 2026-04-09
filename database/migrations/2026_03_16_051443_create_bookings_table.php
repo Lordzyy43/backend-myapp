@@ -13,49 +13,27 @@ return new class extends Migration
     {
         Schema::create('bookings', function (Blueprint $table) {
             $table->id();
-
-            // 🔥 kode unik untuk user / invoice
             $table->string('booking_code')->unique();
-
-            // 🔥 relasi utama
-            $table->foreignId('user_id')
-                ->constrained('users')
-                ->cascadeOnDelete();
-
-            $table->foreignId('court_id')
-                ->constrained('courts')
-                ->cascadeOnDelete();
-
-            // 🔥 tanggal booking (slot ada di pivot)
+            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+            $table->foreignId('court_id')->constrained('courts')->cascadeOnDelete();
             $table->date('booking_date');
+            $table->foreignId('status_id')->constrained('booking_status');
+            $table->decimal('total_price', 15, 2)->unsigned();
 
-            // 🔥 status booking
-            $table->foreignId('status_id')
-                ->constrained('booking_status');
+            // 🔥 PINDAHAN DARI FILE ORANYE (TAMBAHKAN INI)
+            $table->string('promo_code')->nullable();
+            $table->decimal('discount', 15, 2)->default(0);
+            $table->integer('discount_percentage')->default(0)->nullable(); // WAJIB buat Test!
+            $table->decimal('final_price', 15, 2)->nullable();
 
-            // 🔥 harga total dari slot
-            $table->decimal('total_price', 10, 2)->unsigned();
-
-            // 🔥 AUTO CANCEL SYSTEM
             $table->timestamp('expires_at')->nullable();
-
             $table->timestamps();
             $table->softDeletes();
 
-            /*
-            |--------------------------------------------------------------------------
-            | INDEXING (OPTIMIZED FOR SLOT SYSTEM)
-            |--------------------------------------------------------------------------
-            */
-
-            // 🔥 untuk cek availability cepat
+            // 🔥 INDEX PINDAHAN (TAMBAHKAN INI)
+            $table->index(['status_id', 'expires_at'], 'bookings_status_expires_idx');
+            $table->index(['user_id', 'status_id'], 'bookings_user_status_idx');
             $table->index(['court_id', 'booking_date']);
-
-            // 🔥 untuk history user
-            $table->index(['user_id', 'booking_date']);
-
-            // 🔥 untuk filtering status (dashboard / admin)
-            $table->index(['status_id']);
         });
     }
 

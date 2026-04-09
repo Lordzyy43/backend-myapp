@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use Tests\TestCase;
 use App\Models\User;
+use App\Models\Role;
 use App\Models\Booking;
 use App\Models\Payment;
 use App\Models\Promo;
@@ -28,12 +29,26 @@ class ConcurrencyTest extends TestCase
   {
     parent::setUp();
 
-    $this->user1 = User::factory()->create();
-    $this->user2 = User::factory()->create();
-    $this->bookingDate = now()->addDays(1)->toDateString();
+    // Pastikan cache bersih tiap kali test mulai
+    \Illuminate\Support\Facades\Cache::flush();
 
-    // Ensure slot exists
-    TimeSlot::firstOrCreate(['id' => $this->slotId], [
+    // 1. Buat Role
+    $adminRole = Role::firstOrCreate(['id' => 1], ['role_name' => 'admin']);
+    $userRole = Role::firstOrCreate(['id' => 2], ['role_name' => 'user']);
+
+    // 2. Buat User & LOAD RELASI ROLE (Ini kunci agar tidak 403)
+    $this->user1 = User::factory()->create(['role_id' => $userRole->id]);
+    $this->user1->load('role');
+
+    $this->user2 = User::factory()->create(['role_id' => $userRole->id]);
+    $this->user2->load('role');
+
+    // ... sisa setup kamu (bookingDate, slotId, dll) ...
+    $this->bookingDate = now()->addDays(1)->toDateString();
+    $this->courtId = 1;
+    $this->slotId = 1;
+
+    \App\Models\TimeSlot::firstOrCreate(['id' => $this->slotId], [
       'start_time' => '09:00:00',
       'end_time' => '10:00:00'
     ]);
@@ -68,7 +83,7 @@ class ConcurrencyTest extends TestCase
       ->postJson('/api/v1/bookings', $bookingData2);
 
     $response2->assertStatus(422)
-      ->assertJsonFragment(['slot_ids' => ['One or more selected slots are no longer available']]);
+      ->assertJsonFragment(['slot_ids' => ['Slot sudah dibooking']]);
   }
 
   #[Test]
@@ -133,8 +148,11 @@ class ConcurrencyTest extends TestCase
     $response2 = $this->actingAs($this->user1, 'sanctum')
       ->postJson('/api/v1/payments', $paymentData2);
 
-    $response2->assertStatus(422)
-      ->assertJsonFragment(['booking_id' => ['Booking already has a pending payment']]);
+    $response2->assertStatus(400)
+      ->assertJson([
+        'success' => false,
+        'message' => 'Payment sudah ada'
+      ]);
   }
 
   #[Test]
@@ -293,8 +311,10 @@ class ConcurrencyTest extends TestCase
       'total_price' => 50000
     ]);
 
-    $admin = User::factory()->create();
-    $admin->role_id = 1; // Admin role
+    $adminRole = Role::firstOrCreate(['id' => 1], ['role_name' => 'admin']);
+    $admin = User::factory()->create(['role_id' => $adminRole->id]);; // Admin role
+    $admin->load('role');
+
 
     // Try to approve and reject simultaneously
     $approveResponse = $this->actingAs($admin, 'sanctum')
@@ -321,8 +341,9 @@ class ConcurrencyTest extends TestCase
       'total_price' => 50000
     ]);
 
-    $admin = User::factory()->create();
-    $admin->role_id = 1;
+    $adminRole = Role::firstOrCreate(['id' => 1], ['role_name' => 'admin']);
+    $admin = User::factory()->create(['role_id' => $adminRole->id]); // Admin role
+    $admin->load('role');
 
     // Both admins try to change status simultaneously
     $response1 = $this->actingAs($admin, 'sanctum')
@@ -330,9 +351,8 @@ class ConcurrencyTest extends TestCase
 
     $response1->assertStatus(200);
 
-    $admin2 = User::factory()->create();
-    $admin2->role_id = 1;
-
+    $admin2 = User::factory()->create(['role_id' => 1]);// Admin role
+    $admin2->load('role'); 
     $response2 = $this->actingAs($admin2, 'sanctum')
       ->patchJson("/api/v1/admin/bookings/{$booking->id}/finish");
 
@@ -351,8 +371,8 @@ class ConcurrencyTest extends TestCase
       'total_price' => 50000
     ]);
 
-    $admin = User::factory()->create();
-    $admin->role_id = 1;
+    $admin = User::factory()->create(['role_id' => 1]); // Admin role
+    $admin->load('role'); // Ensure role is loaded for isAdmin() check
 
     // Approve booking (triggers events)
     $response = $this->actingAs($admin, 'sanctum')

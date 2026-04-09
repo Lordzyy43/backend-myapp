@@ -32,7 +32,7 @@ class PaymentController extends Controller
             ->paginate(10);
 
         return $this->success(
-            $payments->items(),
+            ['payments' => $payments],
             'List payment berhasil diambil',
             200,
             [
@@ -72,7 +72,7 @@ class PaymentController extends Controller
                 return Payment::create([
                     'booking_id' => $booking->id,
                     'payment_method' => $validated['payment_method'],
-                    'amount' => $booking->total_price,
+                    'amount' => $booking->final_price,
                     'payment_status_id' => PaymentStatus::pending(),
                     'expired_at' => $booking->expires_at,
                 ]);
@@ -89,6 +89,30 @@ class PaymentController extends Controller
         } catch (\Exception $e) {
             return $this->error('Terjadi kesalahan server', [], 500);
         }
+    }
+
+    // Confirm payment
+    public function confirm(Request $request, $id)
+    {
+        $payment = Payment::findOrFail($id);
+
+        $this->authorize('update', $payment);
+
+        // Tambahkan logic konfirmasi di sini, contoh sederhana:
+        if ($payment->payment_status_id === 2) { // Assuming 2 is the ID for 'confirmed' status
+            return response()->json([
+                'payment' => ['Payment has already been processed']
+            ], 422);
+        }
+
+        $payment->update([
+            'payment_status_id' => 2, // Assuming 2 is the ID for 'confirmed' status
+            'transaction_id' => $request->transaction_id,
+            'notes' => $request->notes,
+            'paid_at' => now()
+        ]);
+
+        return response()->json(['success' => true, 'message' => 'Payment has already been confirmed']);
     }
 
     /**

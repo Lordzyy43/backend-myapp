@@ -171,42 +171,52 @@ class PromoTest extends TestCase
   #[Test]
   public function promo_code_usage_count_increments_atomically()
   {
-    // Test concurrent usage to ensure atomic increment
-    $this->promo->update(['max_uses' => 2, 'used_count' => 0]);
+    // 1. Setup Promo
+    $this->promo->update(['usage_limit' => 2, 'used_count' => 0]);
 
-    // Simulate concurrent requests
+    // 2. AMBIL slot yang sudah ada (jangan bikin baru biar gak bentrok jam)
+    $allSlots = \App\Models\TimeSlot::all();
+
+    // Jika ternyata slot di DB kurang dari 6, baru kita buatkan tambahannya dengan jam yang jauh (malam hari)
+    if ($allSlots->count() < 6) {
+      for ($i = 1; $i <= 6; $i++) {
+        \App\Models\TimeSlot::factory()->create([
+          'start_time' => sprintf('%02d:00:00', 17 + $i), // Jam 18:00 ke atas biar gak bentrok pagi
+          'end_time'   => sprintf('%02d:00:00', 18 + $i),
+        ]);
+      }
+      $allSlots = \App\Models\TimeSlot::all();
+    }
+
     $bookingData = [
       'court_id' => 1,
       'booking_date' => now()->addDays(1)->toDateString(),
-      'slot_ids' => [1, 2],
+      'slot_ids' => [$allSlots[0]->id, $allSlots[1]->id],
       'promo_code' => 'TEST10'
     ];
 
-    // First request should succeed
-    $response1 = $this->actingAs($this->user, 'sanctum')
-      ->postJson('/api/v1/bookings', $bookingData);
-
+    // Request 1: Berhasil
+    $response1 = $this->actingAs($this->user, 'sanctum')->postJson('/api/v1/bookings', $bookingData);
     $response1->assertStatus(201);
 
-    // Check usage count incremented
     $this->promo->refresh();
     $this->assertEquals(1, $this->promo->used_count);
 
-    // Second request should succeed
-    $user2 = User::factory()->create();
-    $response2 = $this->actingAs($user2, 'sanctum')
-      ->postJson('/api/v1/bookings', $bookingData);
+    // Request 2: Berhasil (Pakai slot index 2 & 3)
+    $user2 = \App\Models\User::factory()->create();
+    $bookingData['slot_ids'] = [$allSlots[2]->id, $allSlots[3]->id];
 
+    $response2 = $this->actingAs($user2, 'sanctum')->postJson('/api/v1/bookings', $bookingData);
     $response2->assertStatus(201);
 
-    // Check usage count incremented again
     $this->promo->refresh();
     $this->assertEquals(2, $this->promo->used_count);
 
-    // Third request should fail
-    $user3 = User::factory()->create();
-    $response3 = $this->actingAs($user3, 'sanctum')
-      ->postJson('/api/v1/bookings', $bookingData);
+    // Request 3: Gagal (Pakai slot index 4 & 5)
+    $user3 = \App\Models\User::factory()->create();
+    $bookingData['slot_ids'] = [$allSlots[4]->id, $allSlots[5]->id];
+
+    $response3 = $this->actingAs($user3, 'sanctum')->postJson('/api/v1/bookings', $bookingData);
 
     $response3->assertStatus(422)
       ->assertJsonFragment(['promo_code' => ['Promo code usage limit exceeded']]);

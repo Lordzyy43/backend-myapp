@@ -50,21 +50,22 @@ class BookingController extends Controller
     public function store(StoreBookingRequest $request)
     {
         try {
-            $booking = $this->bookingService->create(
-                auth()->user(),
-                $request->validated()
-            );
+            // 1. Jalankan logic booking di Service
+            $booking = $this->bookingService->store($request->validated());
 
-            return $this->created(['booking' => $booking], 'Booking berhasil');
-        } catch (\Throwable $e) {
-            return $this->error(
-                $e->getMessage(),
-                null,
-                $e->getCode() ?: 400
-            );
+            // 2. Load relasi supaya data di JSON lengkap (Opsional tapi bagus buat Test)
+            $booking->load(['court', 'timeSlots', 'status']);
+
+            // 3. Return data model langsung
+            return $this->success([
+                'booking' => $booking->load(['court', 'timeSlots', 'status']),
+            ], 'Booking created successfully', 201);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->error('Validation failed', $e->errors(), 422);
+        } catch (\Exception $e) {
+            return $this->error($e->getMessage(), null, 400);
         }
     }
-
     /**
      * SHOW BOOKING
      */
