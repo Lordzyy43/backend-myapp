@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Booking;
 use App\Models\BookingTimeSlot;
 use App\Models\BookingStatus;
+use App\Models\PaymentStatus;
 use App\Models\Court;
 use App\Models\Promo;
 use App\Models\TimeSlot;
@@ -26,12 +27,11 @@ class BookingService
       // 1. Validasi Slot & Lock
       $slots = TimeSlot::whereIn('id', $data['slot_ids'])->lockForUpdate()->get();
       if ($slots->count() !== count($data['slot_ids'])) {
-        throw new \Exception('Slot tidak valid'); // Ini internal error (500) okelah
+        throw new \Exception('Slot tidak valid');
       }
 
       // 2. Anti Double Booking
       if (BookingTimeSlot::isBooked($data['court_id'], $data['booking_date'], $data['slot_ids'])) {
-        // Kita pakai ValidationException juga di sini biar Test Atomicity lebih rapi
         throw \Illuminate\Validation\ValidationException::withMessages([
           'slot_ids' => ['Slot sudah dibooking']
         ]);
@@ -47,14 +47,13 @@ class BookingService
       // 4. Inisialisasi Variabel Promo
       $discount = 0;
       $promoCode = null;
-      $discountPercentage = 0; // 🔥 Tambahkan ini untuk tracking
+      $discountPercentage = 0;
 
       // 5. Cek Promo
       if (!empty($data['promo_code'])) {
         $promo = Promo::whereRaw('LOWER(promo_code) = ?', [strtolower($data['promo_code'])])
           ->lockForUpdate()->first();
 
-        // --- 🛑 VALIDASI PROMO (WAJIB ValidationException untuk status 422) ---
         if (!$promo) {
           throw \Illuminate\Validation\ValidationException::withMessages(['promo_code' => ['Invalid promo code']]);
         }
@@ -63,7 +62,6 @@ class BookingService
         }
 
         $today = now()->toDateString();
-        // Cast start_date ke string jika belum otomatis
         if ($promo->start_date->format('Y-m-d') > $today || $promo->end_date->format('Y-m-d') < $today) {
           throw \Illuminate\Validation\ValidationException::withMessages(['promo_code' => ['Promo code has expired']]);
         }
@@ -72,11 +70,9 @@ class BookingService
           throw \Illuminate\Validation\ValidationException::withMessages(['promo_code' => ['Promo code usage limit exceeded']]);
         }
 
-        // Hitung diskon & simpan persentase
         $discount = $promo->calculateDiscount($total);
         $promoCode = $promo->promo_code;
 
-        // 🔥 Simpan persentase jika tipe promo-nya memang 'percentage'
         if ($promo->discount_type === 'percentage') {
           $discountPercentage = $promo->discount_value;
         }
@@ -84,9 +80,9 @@ class BookingService
         $promo->markUsed();
       }
 
-      // 6. Buat Booking dengan data final
+      // 6. Buat Booking
       $booking = Booking::create([
-        'booking_code'        => 'BK-' . strtoupper(Str::random(8)), // Pastikan sudah use Str
+        'booking_code'        => 'BK-' . strtoupper(\Illuminate\Support\Str::random(8)),
         'user_id'             => $user->id,
         'court_id'            => $data['court_id'],
         'booking_date'        => $data['booking_date'],
@@ -94,8 +90,8 @@ class BookingService
         'total_price'         => $total,
         'promo_code'          => $promoCode,
         'discount'            => $discount,
-        'discount_percentage' => $discountPercentage, // 🔥 ISI INI BIAR TEST TRACKING LOLOS
-        'final_price'         => max(0, $total - $discount), // 🔥 CEGAH NILAI MINUS
+        'discount_percentage' => $discountPercentage,
+        'final_price'         => max(0, $total - $discount),
       ]);
 
       // 7. Attach Slot
@@ -106,10 +102,17 @@ class BookingService
         ]);
       }
 
-      // 8. Finalisasi
+      // 8. Finalisasi & Set Expiry
       $booking->setExpiry();
       $booking->save();
 
+      // 🔥 SOLUSI IDEAL: Hapus Cache Availability agar Test baris 587 IJO
+      // Kita gunakan format date yang konsisten dengan AvailabilityController
+      $dateStr = \Carbon\Carbon::parse($data['booking_date'])->toDateString();
+      $cacheKey = "availability_{$data['court_id']}_{$dateStr}";
+      \Illuminate\Support\Facades\Cache::forget($cacheKey);
+
+      // 9. Trigger Event untuk Notifikasi
       event(new \App\Events\BookingCreated($booking));
 
       return $booking;
@@ -162,20 +165,19 @@ class BookingService
     return DB::transaction(function () use ($booking) {
       $booking = $this->lockBooking($booking);
 
-      // Jangan pakai < now() karena di test waktunya sangat mepet
-      // Gunakan status check saja
-      if ($booking->status_id == 3) {
+      // Forbidden to cancel finished booking
+      if ($booking->status_id == BookingStatus::finished()) {
         throw new \Exception('Tidak bisa cancel booking yang sudah selesai');
       }
 
       $booking->update([
-        'status_id' => 4 // Langsung tembak ID 4 (Cancelled)
+        'status_id' => BookingStatus::cancelled()
       ]);
 
       // 🔥 WAJIB: Update juga status payment-nya agar Test Hijau
       if ($booking->payment) {
         $booking->payment->update([
-          'payment_status_id' => 4 // Cancelled
+          'payment_status_id' => PaymentStatus::where('payment_status', 'cancelled')->value('id')
         ]);
       }
 
@@ -191,33 +193,46 @@ class BookingService
    */
   public function approve(Booking $booking): Booking
   {
+    // Pastikan pakai return di depan DB::transaction
     return DB::transaction(function () use ($booking) {
+      try {
+        $booking = $this->lockBooking($booking);
 
-      $booking = $this->lockBooking($booking);
+        $allowedStatuses = [
+          \App\Models\BookingStatus::pending(),
+          \App\Models\BookingStatus::confirmed()
+        ];
 
-      if ($booking->status_id !== BookingStatus::pending()) {
-        throw new Exception('Hanya booking pending');
+        if (!in_array($booking->status_id, $allowedStatuses)) {
+          throw new \Exception('Hanya booking pending atau sudah dikonfirmasi pembayaran yang bisa di-approve');
+        }
+
+        if ($booking->isExpired()) {
+          throw new \Exception('Booking ini sudah expired');
+        }
+
+        $booking->update([
+          'status_id' => \App\Models\BookingStatus::confirmed(),
+          'approved_at' => now(),
+          'approved_by' => auth()->id(),
+        ]);
+
+        $dateStr = \Carbon\Carbon::parse($booking->booking_date)->toDateString();
+        $cacheKey = "availability_{$booking->court_id}_{$dateStr}";
+        \Illuminate\Support\Facades\Cache::forget($cacheKey);
+
+        event(new \App\Events\BookingApproved($booking->fresh(['user', 'court', 'status'])));
+
+        return $booking;
+      } catch (\Exception $e) {
+        \Illuminate\Support\Facades\Log::error("Approve Booking Failed: " . $e->getMessage());
+        throw $e;
       }
-
-      if ($booking->isExpired()) {
-        throw new Exception('Booking expired');
-      }
-
-      $booking->update([
-        'status_id' => BookingStatus::confirmed()
-      ]);
-
-      event(new \App\Events\BookingApproved($booking));
-
-      return $booking;
     });
   }
 
   /**
    * 🔥 FINISH (ADMIN)
-   */
-  /**
-   * 🔥 FINISH (ADMIN) - Versi Ideal
    */
   public function finish(Booking $booking): Booking
   {

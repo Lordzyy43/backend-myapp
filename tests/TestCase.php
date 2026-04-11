@@ -4,6 +4,15 @@ namespace Tests;
 
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Models\Role;
+use App\Models\User;
+use App\Models\Venue;
+use App\Models\Sport;
+use App\Models\Court;
+use App\Models\TimeSlot;
+use App\Models\VenueOperatingHour;
+use Database\Seeders\BookingStatusSeeder;
+use Database\Seeders\PaymentStatusSeeder;
 
 abstract class TestCase extends BaseTestCase
 {
@@ -13,57 +22,83 @@ abstract class TestCase extends BaseTestCase
     {
         parent::setUp();
 
-        // Run essential seeders for tests
+        // 1. Jalankan Seeder Status (Wajib untuk flow Booking & Payment)
         $this->seed([
-            \Database\Seeders\BookingStatusSeeder::class,
-            \Database\Seeders\PaymentStatusSeeder::class,
+            BookingStatusSeeder::class,
+            PaymentStatusSeeder::class,
         ]);
 
-        // Create roles if they don't exist
-        \App\Models\Role::firstOrCreate(['role_name' => 'user']);
-        \App\Models\Role::firstOrCreate(['role_name' => 'admin']);
-        \App\Models\Role::firstOrCreate(['role_name' => 'owner']);
+        // 2. Inisialisasi Roles
+        $this->setupRoles();
 
-        // Create test data for courts and time slots
-        $this->createTestData();
+        // 3. Setup Data Master (Venue, Hours, Courts, Slots)
+        $this->createFullTestData();
+
+        // 4. Pastikan Queue berjalan sinkron khusus Testing
+        $this->app->make(\Illuminate\Contracts\Console\Kernel::class)->call('config:clear');
     }
 
-    private function createTestData()
+    /**
+     * Setup Roles Dasar
+     */
+    private function setupRoles(): void
     {
-        // Create owner user first
-        $ownerRole = \App\Models\Role::where('role_name', 'owner')->first();
-        $owner = \App\Models\User::factory()->create([
+        Role::firstOrCreate(['role_name' => 'user']);
+        Role::firstOrCreate(['role_name' => 'admin']);
+        Role::firstOrCreate(['role_name' => 'owner']);
+    }
+
+    /**
+     * Create Full Test Data Environment
+     */
+    private function createFullTestData(): void
+    {
+        // A. Create Owner
+        $ownerRole = Role::where('role_name', 'owner')->first();
+        $owner = User::factory()->create([
             'role_id' => $ownerRole->id,
-            'name' => 'Test Owner'
+            'name' => 'Sensei Test Owner'
         ]);
 
-        // Create venue
-        $venue = \App\Models\Venue::factory()->create([
-            'name' => 'Test Venue',
-            'slug' => 'test-venue',
-            'address' => 'Test Address',
-            'city' => 'Test City',
-            'description' => 'Test venue description'
+        // B. Create Venue
+        $venue = Venue::factory()->create([
+            'name' => 'Test Olympic Center',
+            'slug' => 'test-olympic-center',
+            'address' => 'Jl. Testing No. 123',
+            'city' => 'Jakarta',
+            'description' => 'Venue khusus untuk Automated Testing'
         ]);
 
-        // Create sport
-        $sport = \App\Models\Sport::firstOrCreate([
-            'name' => 'Badminton'
-        ]);
-
-        // Create courts
-        for ($i = 1; $i <= 5; $i++) {
-            \App\Models\Court::firstOrCreate([
-                'id' => $i
-            ], [
+        // C. Create Operating Hours (SYNCED WITH MIGRATION)
+        // Kita pakai loop 0-6 karena day_of_week di migrasi kamu adalah tinyInteger
+        for ($i = 0; $i <= 6; $i++) {
+            VenueOperatingHour::create([
                 'venue_id' => $venue->id,
-                'name' => "Court {$i}",
-                'sport_id' => $sport->id,
-                'price_per_hour' => 50000
+                'day_of_week' => $i, // 0 = Minggu, 1 = Senin, dst.
+                'open_time' => '08:00:00',
+                'close_time' => '22:00:00',
+                // Note: 'is_open' dihapus karena tidak ada di migrasi kamu
             ]);
         }
 
-        // Create time slots
+        // D. Create Sport
+        $sport = Sport::firstOrCreate(['name' => 'Badminton']);
+
+        // E. Create Courts (1-5)
+        for ($i = 1; $i <= 5; $i++) {
+            Court::firstOrCreate(
+                ['id' => $i],
+                [
+                    'venue_id' => $venue->id,
+                    'name' => "Court {$i}",
+                    'sport_id' => $sport->id,
+                    'price_per_hour' => 50000,
+                    // Pastikan kolom 'status' ada di migration courts kamu
+                ]
+            );
+        }
+
+        // F. Create Time Slots (08:00 - 13:00)
         $slots = [
             ['id' => 1, 'start_time' => '08:00:00', 'end_time' => '09:00:00'],
             ['id' => 2, 'start_time' => '09:00:00', 'end_time' => '10:00:00'],
@@ -73,9 +108,7 @@ abstract class TestCase extends BaseTestCase
         ];
 
         foreach ($slots as $slot) {
-            \App\Models\TimeSlot::firstOrCreate([
-                'id' => $slot['id']
-            ], $slot);
+            TimeSlot::firstOrCreate(['id' => $slot['id']], $slot);
         }
     }
 }

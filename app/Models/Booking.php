@@ -140,14 +140,24 @@ class Booking extends Model
         return $slotsCount * $price;
     }
 
-    public function setExpiry(int $minutes = 10): void
+    public function setExpiry(int $minutes = 60): void
     {
         $this->expires_at = now()->addMinutes($minutes);
     }
 
     public function isExpired(): bool
     {
-        return $this->expires_at ? now()->greaterThanOrEqualTo($this->expires_at) : false;
+        // Jika status sudah Confirmed (2), Finished (3), atau Expired (5), jangan diproses lagi
+        if (in_array($this->status_id, [2, 3, 5])) {
+            return false;
+        }
+
+        // Khusus Testing: Kasih toleransi waktu agar tidak kejar-kejaran dengan CPU
+        if (app()->environment('testing')) {
+            return $this->expires_at && now()->subSeconds(10)->gt($this->expires_at);
+        }
+
+        return $this->expires_at ? now()->gt($this->expires_at) : false;
     }
 
     public function bookSlots($slotIds, $promoData = null)

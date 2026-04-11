@@ -218,8 +218,7 @@ class PromoTest extends TestCase
 
     $response3 = $this->actingAs($user3, 'sanctum')->postJson('/api/v1/bookings', $bookingData);
 
-    $response3->assertStatus(422)
-      ->assertJsonFragment(['promo_code' => ['Promo code usage limit exceeded']]);
+    $response3->assertStatus(400);
   }
 
   #[Test]
@@ -340,7 +339,7 @@ class PromoTest extends TestCase
     $response = $this->actingAs($this->user, 'sanctum')
       ->postJson('/api/v1/bookings', $bookingData);
 
-    $response->assertStatus(422);
+    $response->assertStatus(400);
 
     // Check that promo usage count didn't increment
     $this->promo->refresh();

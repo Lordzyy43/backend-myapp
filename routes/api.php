@@ -19,6 +19,7 @@ use App\Http\Controllers\API\V1\Public\CourtController;
 use App\Http\Controllers\API\V1\Public\TimeSlotController;
 use App\Http\Controllers\API\V1\Public\AvailabilityController;
 use App\Http\Controllers\API\V1\Public\ReviewController;
+use App\Http\Controllers\API\V1\Public\PromoController;
 
 // User
 use App\Http\Controllers\API\V1\User\BookingController;
@@ -32,6 +33,7 @@ use App\Http\Controllers\API\V1\Admin\TimeSlotController as AdminTimeSlotControl
 use App\Http\Controllers\API\V1\Admin\SportController as AdminSportController;
 use App\Http\Controllers\API\V1\Admin\BookingController as AdminBookingController;
 use App\Http\Controllers\API\V1\Admin\PaymentController as AdminPaymentController;
+use App\Http\Controllers\API\V1\Admin\PromoController as AdminPromoController;
 
 Route::prefix('v1')->group(function () {
 
@@ -74,7 +76,19 @@ Route::prefix('v1')->group(function () {
     Route::get('/courts/{court_id}/timeslots', [TimeSlotController::class, 'byCourt']);
 
     Route::get('/availability', [AvailabilityController::class, 'index']);
+
     Route::get('/reviews', [ReviewController::class, 'index']);
+    Route::get('/reviews/{id}', [ReviewController::class, 'show']);
+    Route::get('/courts/{courtId}/reviews', [ReviewController::class, 'getByCourt']);
+    Route::get('/courts/{courtId}/reviews/rating/{rating}', [ReviewController::class, 'getByRating']);
+    Route::get('/courts/{courtId}/reviews/distribution', [ReviewController::class, 'getRatingDistribution']);
+    Route::get('/courts/{courtId}/reviews/stats', [ReviewController::class, 'getStatistics']);
+    Route::get('/venues/{venueId}/reviews', [ReviewController::class, 'getByVenue']);
+
+    Route::get('/promos', [PromoController::class, 'index']);
+    Route::get('/promos/expiring', [PromoController::class, 'expiringPromos']);
+    Route::post('/promos/validate', [PromoController::class, 'validate']);
+    Route::get('/promos/{code}', [PromoController::class, 'show']);
   });
 
   /*
@@ -138,6 +152,12 @@ Route::prefix('v1')->group(function () {
     |--------------------------------------------------------------------------
     */
     Route::post('/reviews', [ReviewController::class, 'store']);
+    Route::get('/my-reviews', [ReviewController::class, 'getUserReviews']);
+    Route::get('/reviews/{id}', [ReviewController::class, 'show']);
+    Route::patch('/reviews/{id}', [ReviewController::class, 'update']);
+    Route::delete('/reviews/{id}', [ReviewController::class, 'destroy']);
+    Route::post('/reviews/{id}/helpful', [ReviewController::class, 'markHelpful']);
+    Route::post('/reviews/{id}/report', [ReviewController::class, 'report']);
   });
 
   /*
@@ -158,6 +178,17 @@ Route::prefix('v1')->group(function () {
       Route::apiResource('courts', AdminCourtController::class);
       Route::apiResource('timeslots', AdminTimeSlotController::class);
       Route::apiResource('sports', AdminSportController::class);
+      Route::apiResource('promos', AdminPromoController::class);
+
+      /*
+      |--------------------------------------------------------------------------
+      | PROMO MANAGEMENT
+      |--------------------------------------------------------------------------
+      */
+      Route::prefix('promos')->group(function () {
+        Route::post('/deactivate-expired', [AdminPromoController::class, 'deactivateExpired']);
+        Route::get('/stats', [AdminPromoController::class, 'statistics']);
+      });
 
       /*
       |--------------------------------------------------------------------------
