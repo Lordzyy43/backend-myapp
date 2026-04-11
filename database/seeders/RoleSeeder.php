@@ -13,5 +13,7 @@ class RoleSeeder extends Seeder
         Role::firstOrCreate(['role_name' => 'admin']);
         // ID 2
         Role::firstOrCreate(['role_name' => 'user']);
+        // ID 3 - Venue/Court Owner
+        Role::firstOrCreate(['role_name' => 'owner']);
     }
 }

@@ -50,18 +50,20 @@ class BookingController extends Controller
     public function store(StoreBookingRequest $request)
     {
         try {
-            // 1. Jalankan logic booking di Service
             $booking = $this->bookingService->store($request->validated());
 
-            // 2. Load relasi supaya data di JSON lengkap (Opsional tapi bagus buat Test)
-            $booking->load(['court', 'timeSlots', 'status']);
+            // 🔥 1. SOLUSI AVAILABILITY: Hapus Cache setelah booking
+            $dateStr = \Carbon\Carbon::parse($request->date)->toDateString();
+            $cacheKey = "availability_{$request->court_id}_{$dateStr}";
+            \Illuminate\Support\Facades\Cache::forget($cacheKey);
 
-            // 3. Return data model langsung
+            // 🔥 2. SOLUSI NOTIFIKASI: Pemicu Event
+            // (Pastikan ini dipanggil jika di dalam Service belum dipanggil)
+            event(new \App\Events\BookingCreated($booking));
+
             return $this->success([
                 'booking' => $booking->load(['court', 'timeSlots', 'status']),
             ], 'Booking created successfully', 201);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->error('Validation failed', $e->errors(), 422);
         } catch (\Exception $e) {
             return $this->error($e->getMessage(), null, 400);
         }

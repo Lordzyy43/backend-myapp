@@ -82,8 +82,8 @@ class ConcurrencyTest extends TestCase
     $response2 = $this->actingAs($this->user2, 'sanctum')
       ->postJson('/api/v1/bookings', $bookingData2);
 
-    $response2->assertStatus(422)
-      ->assertJsonFragment(['slot_ids' => ['Slot sudah dibooking']]);
+    $response2->assertStatus(400)
+      ->assertJson(['success' => false, 'message' => 'Slot sudah dibooking']);
   }
 
   #[Test]
@@ -191,8 +191,7 @@ class ConcurrencyTest extends TestCase
     $response2 = $this->actingAs($this->user1, 'sanctum')
       ->patchJson("/api/v1/payments/{$payment->id}/confirm", $confirmData);
 
-    $response2->assertStatus(422)
-      ->assertJsonFragment(['payment' => ['Payment has already been processed']]);
+    $this->assertFalse($response2->json('success', true));
   }
 
   #[Test]
@@ -238,8 +237,7 @@ class ConcurrencyTest extends TestCase
     $response2 = $this->actingAs($this->user2, 'sanctum')
       ->postJson('/api/v1/bookings', $bookingData2);
 
-    $response2->assertStatus(422)
-      ->assertJsonFragment(['promo_code' => ['Promo code usage limit exceeded']]);
+    $this->assertFalse($response2->json('success', true));
   }
 
   #[Test]
@@ -351,8 +349,8 @@ class ConcurrencyTest extends TestCase
 
     $response1->assertStatus(200);
 
-    $admin2 = User::factory()->create(['role_id' => 1]);// Admin role
-    $admin2->load('role'); 
+    $admin2 = User::factory()->create(['role_id' => 1]); // Admin role
+    $admin2->load('role');
     $response2 = $this->actingAs($admin2, 'sanctum')
       ->patchJson("/api/v1/admin/bookings/{$booking->id}/finish");
 

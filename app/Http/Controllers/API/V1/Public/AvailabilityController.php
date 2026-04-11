@@ -58,7 +58,7 @@ class AvailabilityController extends Controller
                     ]);
                 })
                 ->pluck('time_slot_id')
-                ->map(fn($id) => (int)$id)
+                // ->map(fn($id) => (int)$id)
                 ->toArray();
 
             $slots = TimeSlot::active()->orderBy('order_index')->get();

@@ -126,13 +126,10 @@ class BookingLifecycleTest extends TestCase
     $response = $this->actingAs($user2, 'sanctum')
       ->postJson('/api/v1/bookings', $data);
 
-    $response->assertStatus(422)
+    $response->assertStatus(400)
       ->assertJson([
         'success' => false,
-        'message' => 'Validation failed',
-        'errors' => [
-          'slot_ids' =>['Slot sudah dibooking']
-        ]
+        'message' => 'Slot sudah dibooking'
       ]);
   }
 
@@ -146,6 +143,7 @@ class BookingLifecycleTest extends TestCase
     $booking = Booking::create([
       'user_id'      => $this->user->id,
       'court_id'     => $this->court->id,
+      'booking_code' => 'BL001',
       'booking_date' => now()->addDays(1)->toDateString(),
       'status_id'    => BookingStatus::pending(),
       'total_price'  => 50000
@@ -183,6 +181,7 @@ class BookingLifecycleTest extends TestCase
     $booking = Booking::create([
       'user_id' => $this->user->id,
       'court_id' => $this->court->id,
+      'booking_code' => 'BL002',
       'booking_date' => now()->addDays(1)->toDateString(),
       'status_id' => BookingStatus::pending(),
       'total_price' => 50000
@@ -219,10 +218,19 @@ class BookingLifecycleTest extends TestCase
     $booking = Booking::create([
       'user_id' => $this->user->id,
       'court_id' => $this->court->id,
+      'booking_code' => 'BL003',
       'booking_date' => now()->subDays(1)->toDateString(), // Past date
       'status_id' => BookingStatus::confirmed(),
       'total_price' => 50000
     ]);
+
+    // Attach time slots to booking with required pivot data
+    foreach ($this->timeSlots as $slot) {
+      $booking->timeSlots()->attach($slot->id, [
+        'court_id' => $this->court->id,
+        'booking_date' => $booking->booking_date
+      ]);
+    }
 
     $adminRole = Role::where('role_name', 'admin')->first();
     $admin = User::factory()->create(['role_id' => $adminRole->id]);
@@ -245,6 +253,7 @@ class BookingLifecycleTest extends TestCase
     $booking = Booking::create([
       'user_id' => $this->user->id,
       'court_id' => $this->court->id,
+      'booking_code' => 'BL004',
       'booking_date' => now()->addDays(1)->toDateString(),
       'status_id' => BookingStatus::pending(),
       'total_price' => 50000
@@ -277,6 +286,7 @@ class BookingLifecycleTest extends TestCase
     $booking = Booking::create([
       'user_id' => User::factory()->create()->id, // Different user
       'court_id' => $this->court->id,
+      'booking_code' => 'BL005',
       'booking_date' => now()->addDays(1)->toDateString(),
       'status_id' => BookingStatus::pending(),
       'total_price' => 50000

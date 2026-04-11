@@ -92,27 +92,44 @@ class PaymentController extends Controller
     }
 
     // Confirm payment
+
     public function confirm(Request $request, $id)
     {
-        $payment = Payment::findOrFail($id);
+        $payment = Payment::with('booking')->findOrFail($id);
 
         $this->authorize('update', $payment);
 
-        // Tambahkan logic konfirmasi di sini, contoh sederhana:
-        if ($payment->payment_status_id === 2) { // Assuming 2 is the ID for 'confirmed' status
+        // Business Rule: Jangan proses jika sudah dikonfirmasi
+        if ($payment->payment_status_id === 2) {
             return response()->json([
-                'payment' => ['Payment has already been processed']
+                'message' => 'Payment has already been processed'
             ], 422);
         }
 
-        $payment->update([
-            'payment_status_id' => 2, // Assuming 2 is the ID for 'confirmed' status
-            'transaction_id' => $request->transaction_id,
-            'notes' => $request->notes,
-            'paid_at' => now()
-        ]);
+        DB::transaction(function () use ($payment, $request) {
+            // 1. Update status payment ke 2 (Paid/Confirmed)
+            $payment->update([
+                'payment_status_id' => 2,
+                'transaction_id' => $request->transaction_id,
+                'notes' => $request->notes,
+                'paid_at' => now()
+            ]);
 
-        return response()->json(['success' => true, 'message' => 'Payment has already been confirmed']);
+            // 🔥 2. UPDATE BOOKING STATUS (PENTING!)
+            // Tanpa ini, status booking tetap 'pending' dan test akan gagal
+            $payment->booking->update([
+                'status_id' => 2 // Confirmed
+            ]);
+
+            // 🔥 3. TRIGGER EVENT (AGAR NOTIFIKASI DIBUAT)
+            // Ini yang akan memicu SendBookingApprovedNotification
+            event(new \App\Events\BookingApproved($payment->booking));
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Payment and Booking have been confirmed'
+        ]);
     }
 
     /**
