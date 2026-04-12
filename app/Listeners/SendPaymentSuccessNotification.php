@@ -26,13 +26,13 @@ class SendPaymentSuccessNotification implements ShouldQueue
         }
 
         NotificationService::send(
-            $payment->booking->user_id,
-            'payment_success',
-            'Pembayaran Berhasil',
-            'Pembayaran kamu berhasil untuk booking ' . ($payment->booking->booking_code ?? ''),
-            null, // notifiable
-            null, // action_url
-            [
+            userId: $payment->booking->user_id,
+            type: 'payment_success',
+            title: 'Pembayaran Berhasil',
+            message: 'Pembayaran kamu berhasil untuk booking ' . ($payment->booking->booking_code ?? ''),
+            notifiable: null,
+            actionUrl: null,
+            data: [
                 'payment_id' => $payment->id,
                 'booking_id' => $payment->booking->id ?? null,
                 'booking_code' => $payment->booking->booking_code ?? null,

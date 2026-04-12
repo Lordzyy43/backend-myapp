@@ -31,7 +31,7 @@ class SendPaymentExpiredNotification implements ShouldQueue
             type: 'payment_expired',
             title: 'Pembayaran Kadaluarsa',
             message: "Pembayaran untuk booking {$booking->booking_code} telah habis",
-            payload: [
+            data: [
                 'payment_id' => $payment->id,
                 'booking_id' => $booking->id,
                 'booking_code' => $booking->booking_code,

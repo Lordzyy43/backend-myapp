@@ -30,38 +30,67 @@ class BookingController extends Controller
    */
   protected function handleAction($id, string $method, string $successMessage): JsonResponse
   {
-    // Gunakan lockForUpdate jika aplikasi skala besar untuk cegah race condition
-    $booking = Booking::with(['user', 'court', 'timeSlots', 'status'])
-      ->findOrFail($id);
+    // 1. Ambil data
+    $booking = Booking::with(['user', 'court', 'timeSlots', 'status'])->findOrFail($id);
 
-    // Authorization via Policy (e.g., BookingPolicy)
+    // 2. Authorization
     $this->authorize($method, $booking);
 
-    return DB::transaction(function () use ($booking, $method, $successMessage) {
-      try {
-        // Eksekusi logic di Service
+    // 3. FULL WRAPPER: Tangkap semua error mulai dari validasi sampai transaksi
+    try {
+      // Jalankan Validasi Guardian
+      $this->validateBookingState($booking, $method);
+
+      // Jalankan Transaksi
+      return DB::transaction(function () use ($booking, $method, $successMessage) {
         $result = $this->bookingService->{$method}($booking);
 
         Log::info("Booking Action Successful", [
           'action'    => $method,
           'booking_id' => $booking->id,
           'admin_id'  => auth()->id(),
-          'timestamp' => now()->toDateTimeString()
         ]);
 
         return $this->success($result, $successMessage);
-      } catch (\Exception $e) {
-        DB::rollBack();
-        Log::error("Booking Action Failed", [
-          'action'    => $method,
-          'booking_id' => $booking->id,
-          'error'     => $e->getMessage(),
-          'trace'     => $e->getTraceAsString()
-        ]);
+      });
+    } catch (\Exception $e) {
+      // SEMUA error (baik dari validateBookingState ATAU dari BookingService) 
+      // akan tertangkap di sini dan memberikan response 422 yang diinginkan tes
+      Log::error("Booking Action Failed [{$method}] ID: {$booking->id}", [
+        'error' => $e->getMessage()
+      ]);
 
-        return $this->error("Gagal melakukan aksi {$method}: " . $e->getMessage(), null, 422);
-      }
-    });
+      return $this->error($e->getMessage(), null, 422);
+    }
+  }
+
+  /**
+   * Guardian: Memastikan state booking sesuai sebelum diproses service
+   */
+  protected function validateBookingState(Booking $booking, string $method)
+  {
+    $status = $booking->status->status_name;
+
+    switch ($method) {
+      case 'approve':
+        if ($status === 'confirmed') {
+          throw new \Exception("Booking sudah dalam status confirmed.");
+        }
+        break;
+
+      case 'finish':
+        // Logic tambahan untuk finish bisa diletakkan di sini atau biarkan di service
+        if ($status !== 'confirmed') {
+          throw new \Exception("Hanya booking dengan status Confirmed yang bisa diselesaikan.");
+        }
+        break;
+
+      case 'reject':
+        if ($status !== 'pending') {
+          throw new \Exception("Hanya booking pending yang bisa di-reject.");
+        }
+        break;
+    }
   }
 
   public function index()

@@ -49,7 +49,7 @@ class Payment extends Model
     // 🔥 apakah sudah dibayar
     public function isPaid(): bool
     {
-        return $this->paid_at !== null;
+        return $this->payment_status_id === PaymentStatus::paid() || $this->paid_at !== null;
     }
 
     // 🔥 apakah expired

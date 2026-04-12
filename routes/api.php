@@ -2,11 +2,15 @@
 
 use Illuminate\Support\Facades\Route;
 
+
 /*
 |--------------------------------------------------------------------------
 | Controllers
 |--------------------------------------------------------------------------
 */
+// is_admin middleware
+use App\Http\Middleware\IsAdmin;
+
 
 // Auth
 use App\Http\Controllers\API\V1\Auth\AuthController;

@@ -31,7 +31,7 @@ class SendPaymentFailedNotification implements ShouldQueue
             type: 'payment_failed',
             title: 'Pembayaran Gagal',
             message: 'Pembayaran kamu gagal untuk booking ' . $booking->booking_code,
-            payload: [
+            data: [
                 'payment_id' => $payment->id,
                 'booking_id' => $booking->id,
                 'booking_code' => $booking->booking_code,

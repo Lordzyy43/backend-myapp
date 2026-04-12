@@ -12,7 +12,10 @@ use App\Models\TimeSlot;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Carbon;
 use Exception;
+
+use function Symfony\Component\Clock\now;
 
 class BookingService
 {
@@ -177,13 +180,13 @@ class BookingService
       // 🔥 WAJIB: Update juga status payment-nya agar Test Hijau
       if ($booking->payment) {
         $booking->payment->update([
-          'payment_status_id' => PaymentStatus::where('payment_status', 'cancelled')->value('id')
+          'payment_status_id' => PaymentStatus::where('status_name', 'cancelled')->value('id')
         ]);
       }
 
       $booking->timeSlots()->detach();
 
-      event(new \App\Events\BookingRejected($booking));
+      event(new \App\Events\BookingCancelled($booking));
 
       return $booking;
     });
@@ -240,18 +243,22 @@ class BookingService
       $booking = $this->lockBooking($booking);
 
       if ($booking->status_id !== BookingStatus::confirmed()) {
-        throw new Exception('Hanya booking dengan status Confirmed yang bisa diselesaikan.');
+        throw new \Exception('Hanya booking dengan status Confirmed yang bisa diselesaikan.');
       }
 
-      // AMBIL SLOT TERAKHIR (Jam Selesai Paling Akhir)
       $lastSlot = $booking->timeSlots()->orderBy('end_time', 'desc')->first();
 
-      // Gabungkan tanggal booking dengan jam selesai slot
-      $finishDateTime = \Carbon\Carbon::parse($booking->booking_date->toDateString() . ' ' . $lastSlot->end_time);
+      // 1. Waktu sekarang (terikat dengan travelTo() di Testing)
+      $now = \Carbon\Carbon::now();
 
-      // VALIDASI JAM: Harus sudah melewati waktu selesai main
-      if (now()->lessThan($finishDateTime)) {
-        throw new Exception("Belum waktunya. Booking ini baru selesai pada jam {$lastSlot->end_time}");
+      // 2. Waktu selesai (berdasarkan tanggal booking dan end_time slot terakhir)
+      $finishDateTime = \Carbon\Carbon::parse(
+        $booking->booking_date->format('Y-m-d') . ' ' . $lastSlot->end_time
+      )->timezone(config('app.timezone'));
+
+      // 3. Validasi: Booking hanya bisa diselesaikan setelah waktu selesai slot
+      if ($now->lessThan($finishDateTime)) {
+        throw new \Exception("Belum waktunya. Booking ini baru selesai pada jam {$lastSlot->end_time}");
       }
 
       $booking->update([
@@ -263,6 +270,8 @@ class BookingService
       return $booking;
     });
   }
+
+  // Utility untuk mengirim error validasi dengan format yang konsisten
 
   protected function abortValidation($field, $message)
   {
