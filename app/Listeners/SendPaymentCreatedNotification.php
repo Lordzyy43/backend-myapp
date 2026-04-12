@@ -31,7 +31,7 @@ class SendPaymentCreatedNotification implements ShouldQueue
             type: 'payment_created',
             title: 'Menunggu Pembayaran',
             message: 'Silakan selesaikan pembayaran untuk booking ' . $booking->booking_code,
-            payload: [
+            data: [
                 'payment_id' => $payment->id,
                 'booking_id' => $booking->id,
                 'booking_code' => $booking->booking_code,

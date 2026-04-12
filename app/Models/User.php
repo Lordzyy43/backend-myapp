@@ -72,7 +72,11 @@ class User extends Authenticatable implements MustVerifyEmail
      */
     public function hasRole(string $roleName): bool
     {
-        return optional($this->role)->role_name === $roleName;
+        if (!$this->relationLoaded('role')) {
+            $this->load('role');
+        }
+
+        return $this->role?->role_name === $roleName;
     }
 
     /**
