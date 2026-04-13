@@ -8,6 +8,7 @@ use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvi
 use App\Events\BookingCreated;
 use App\Events\BookingApproved;
 use App\Events\BookingRejected;
+use App\Events\BookingCancelled;
 use App\Events\BookingFinished;
 use App\Events\BookingExpired;
 
@@ -21,6 +22,7 @@ use App\Events\PaymentExpired;
 use App\Listeners\SendBookingCreatedNotification;
 use App\Listeners\SendBookingApprovedNotification;
 use App\Listeners\SendBookingRejectedNotification;
+use App\Listeners\SendBookingCancelledNotification;
 use App\Listeners\SendBookingFinishedNotification;
 use App\Listeners\SendBookingExpiredNotification; // Optional, bisa re-use SendBookingFinishedNotification
 
@@ -51,7 +53,9 @@ class EventServiceProvider extends ServiceProvider
         BookingRejected::class => [
             SendBookingRejectedNotification::class,
         ],
-
+        BookingCancelled::class => [
+            SendBookingCancelledNotification::class,
+        ],
         BookingFinished::class => [
             SendBookingFinishedNotification::class,
         ],

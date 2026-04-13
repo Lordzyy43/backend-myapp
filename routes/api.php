@@ -133,98 +133,115 @@ Route::prefix('v1')->group(function () {
     | BOOKINGS
     |--------------------------------------------------------------------------
     */
-    Route::get('/bookings', [BookingController::class, 'index']);
-    Route::post('/bookings', [BookingController::class, 'store']);
-    Route::get('/bookings/{id}', [BookingController::class, 'show']);
-    Route::patch('/bookings/{id}/cancel', [BookingController::class, 'cancel']);
+    Route::prefix('bookings')->group(function () {
+      Route::get('/', [BookingController::class, 'index']);
+      Route::post('/', [BookingController::class, 'store']);
+      Route::get('/{id}', [BookingController::class, 'show']);
+      Route::patch('/{id}/cancel', [BookingController::class, 'cancel']);
+    });
 
     /*
     |--------------------------------------------------------------------------
-    | PAYMENTS & NOTIFICATIONS
+    | PAYMENTS
     |--------------------------------------------------------------------------
     */
-    Route::get('/payments', [PaymentController::class, 'index']);
-    Route::get('/payments/{id}', [PaymentController::class, 'show']);
-    Route::post('/payments', [PaymentController::class, 'store']);
-    Route::patch('/payments/{id}/cancel', [PaymentController::class, 'cancel']);
-    Route::patch('/payments/{id}/confirm', [PaymentController::class, 'confirm']); // optional
-    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::prefix('payments')->group(function () {
+      Route::get('/', [PaymentController::class, 'index']);
+      Route::get('/{id}', [PaymentController::class, 'show']);
+      Route::post('/', [PaymentController::class, 'store']);
+      Route::patch('/{id}/cancel', [PaymentController::class, 'cancel']);
+      Route::patch('/{id}/confirm', [PaymentController::class, 'confirm']); // optional
+    });
 
+    /*
+    |--------------------------------------------------------------------------
+    | NOTIFICATIONS
+    |--------------------------------------------------------------------------
+    */
+    Route::prefix('notifications')->group(function () {
+      Route::get('/', [NotificationController::class, 'index']);
+      Route::get('/unread-count', [NotificationController::class, 'unreadCount']);
+      Route::patch('/mark-all-read', [NotificationController::class, 'markAllAsRead']);
+      Route::patch('/{id}/read', [NotificationController::class, 'markAsRead']);
+      Route::delete('/{id}', [NotificationController::class, 'destroy']);
+    });
     /*
     |--------------------------------------------------------------------------
     | REVIEWS
     |--------------------------------------------------------------------------
     */
-    Route::post('/reviews', [ReviewController::class, 'store']);
-    Route::get('/my-reviews', [ReviewController::class, 'getUserReviews']);
-    Route::get('/reviews/{id}', [ReviewController::class, 'show']);
-    Route::patch('/reviews/{id}', [ReviewController::class, 'update']);
-    Route::delete('/reviews/{id}', [ReviewController::class, 'destroy']);
-    Route::post('/reviews/{id}/helpful', [ReviewController::class, 'markHelpful']);
-    Route::post('/reviews/{id}/report', [ReviewController::class, 'report']);
-  });
+    Route::prefix('reviews')->group(function () {
+      Route::post('/', [ReviewController::class, 'store']);
+      Route::get('/my-reviews', [ReviewController::class, 'getUserReviews']);
+      Route::get('/{id}', [ReviewController::class, 'show']);
+      Route::patch('/{id}', [ReviewController::class, 'update']);
+      Route::delete('/{id}', [ReviewController::class, 'destroy']);
+      Route::post('/{id}/helpful', [ReviewController::class, 'markHelpful']);
+      Route::post('/{id}/report', [ReviewController::class, 'report']);
+    });
 
-  /*
+    /*
   |--------------------------------------------------------------------------
   | ADMIN ROUTES
   |--------------------------------------------------------------------------
   */
-  Route::prefix('admin')
-    ->middleware(['auth:sanctum', 'is_admin'])
-    ->group(function () {
+    Route::prefix('admin')
+      ->middleware(['auth:sanctum', 'is_admin'])
+      ->group(function () {
 
-      /*
+        /*
       |--------------------------------------------------------------------------
       | RESOURCE MANAGEMENT
       |--------------------------------------------------------------------------
       */
-      Route::apiResource('venues', AdminVenueController::class);
-      Route::apiResource('courts', AdminCourtController::class);
-      Route::apiResource('timeslots', AdminTimeSlotController::class);
-      Route::apiResource('sports', AdminSportController::class);
-      Route::apiResource('promos', AdminPromoController::class);
+        Route::apiResource('venues', AdminVenueController::class);
+        Route::apiResource('courts', AdminCourtController::class);
+        Route::apiResource('timeslots', AdminTimeSlotController::class);
+        Route::apiResource('sports', AdminSportController::class);
+        Route::apiResource('promos', AdminPromoController::class);
 
-      /*
+        /*
       |--------------------------------------------------------------------------
       | PROMO MANAGEMENT
       |--------------------------------------------------------------------------
       */
-      Route::prefix('promos')->group(function () {
-        Route::post('/deactivate-expired', [AdminPromoController::class, 'deactivateExpired']);
-        Route::get('/stats', [AdminPromoController::class, 'statistics']);
-      });
+        Route::prefix('promos')->group(function () {
+          Route::post('/deactivate-expired', [AdminPromoController::class, 'deactivateExpired']);
+          Route::get('/stats', [AdminPromoController::class, 'statistics']);
+        });
 
-      /*
+        /*
       |--------------------------------------------------------------------------
       | BOOKING MANAGEMENT
       |--------------------------------------------------------------------------
       */
-      Route::prefix('bookings')->group(function () {
-        Route::get('/', [AdminBookingController::class, 'index']);
-        Route::get('/reports', [AdminBookingController::class, 'report']);
-        Route::patch('/{id}/approve', [AdminBookingController::class, 'approve']);
-        Route::patch('/{id}/reject', [AdminBookingController::class, 'reject']);
-        Route::patch('/{id}/finish', [AdminBookingController::class, 'finish']);
-      });
+        Route::prefix('bookings')->group(function () {
+          Route::get('/', [AdminBookingController::class, 'index']);
+          Route::get('/reports', [AdminBookingController::class, 'report']);
+          Route::patch('/{id}/approve', [AdminBookingController::class, 'approve']);
+          Route::patch('/{id}/reject', [AdminBookingController::class, 'reject']);
+          Route::patch('/{id}/finish', [AdminBookingController::class, 'finish']);
+        });
 
-      /*
+        /*
       |--------------------------------------------------------------------------
       | PAYMENT MANAGEMENT
       |--------------------------------------------------------------------------
       */
-      Route::prefix('payments')->group(function () {
-        Route::get('/', [AdminPaymentController::class, 'index']);
-        Route::get('/{id}', [AdminPaymentController::class, 'show']);
-        Route::patch('/{id}/approve', [AdminPaymentController::class, 'approve']);
-        Route::patch('/{id}/reject', [AdminPaymentController::class, 'reject']);
-        Route::patch('/{id}/expire', [AdminPaymentController::class, 'expire']); // optional
-      });
+        Route::prefix('payments')->group(function () {
+          Route::get('/', [AdminPaymentController::class, 'index']);
+          Route::get('/{id}', [AdminPaymentController::class, 'show']);
+          Route::patch('/{id}/approve', [AdminPaymentController::class, 'approve']);
+          Route::patch('/{id}/reject', [AdminPaymentController::class, 'reject']);
+          Route::patch('/{id}/expire', [AdminPaymentController::class, 'expire']); // optional
+        });
 
-      /*
+        /*
       |--------------------------------------------------------------------------
       | USER MANAGEMENT
       |--------------------------------------------------------------------------
       */
-      Route::get('/users', [AdminBookingController::class, 'usersIndex']);
-    });
+        Route::get('/users', [AdminBookingController::class, 'usersIndex']);
+      });
+  });
 });

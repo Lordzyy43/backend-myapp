@@ -14,7 +14,7 @@ class PaymentCreated
 
     public function __construct(Payment $payment)
     {
-        $this->payment = $payment-> load([
+        $this->payment = $payment->load([
             'booking.user',
             'status'
         ]);

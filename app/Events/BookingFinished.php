@@ -14,6 +14,11 @@ class BookingFinished
 
     public function __construct(Booking $booking)
     {
-        $this->booking = $booking->load(['user', 'court', 'timeSlots', 'status']);
+        $this->booking = $booking->load([
+            'user',
+            'court',
+            'timeSlots',
+            'status'
+        ]);
     }
 }

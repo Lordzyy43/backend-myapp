@@ -63,7 +63,6 @@ class IntegrationTest extends TestCase
     \App\Models\TimeSlot::firstOrCreate(['id' => 1], ['court_id' => 1, 'start_time' => '08:00', 'end_time' => '09:00']);
     \App\Models\TimeSlot::firstOrCreate(['id' => 2], ['court_id' => 1, 'start_time' => '09:00', 'end_time' => '10:00']);
 
-    Queue::fake();
     Mail::fake();
   }
 
@@ -236,8 +235,8 @@ class IntegrationTest extends TestCase
     $booking = Booking::find($bookingId);
     $payment = Payment::find($paymentId);
 
-    $this->assertEquals(4, $booking->status_id); // cancelled
-    $this->assertEquals(4, $payment->payment_status_id); // cancelled
+    $this->assertEquals(\App\Models\BookingStatus::cancelled(), $booking->status_id); // cancelled
+    $this->assertEquals(\App\Models\PaymentStatus::cancelled(), $payment->payment_status_id); // cancelled
   }
 
   #[Test]
@@ -286,22 +285,27 @@ class IntegrationTest extends TestCase
     $bookingId = $bookingResponse->json('data.id') ?? $bookingResponse->json('data.booking.id');
     $booking = Booking::find($bookingId);
 
-    // Manually expire the booking (simulate scheduled command)
+    // 1. Update data
     $booking->update([
       'expired_at' => now()->subMinutes(1),
-      'status_id' => 5 // expired
+      'status_id' => \App\Models\BookingStatus::expired() // Gunakan Helper agar aman!
     ]);
 
-    // Verify booking is expired
-    $booking->refresh();
-    $this->assertEquals(5, $booking->status_id);
+    // 2. 🔥 EVOLUSI: Trigger Event secara manual agar Listener Notifikasi berjalan
+    // Pastikan namespace event-nya sesuai dengan yang ada di sistem kamu
+    event(new \App\Events\BookingExpired($booking->fresh()));
 
-    // Check if notification was created
+    // 3. Verify booking is expired
+    $booking->refresh();
+    $this->assertEquals(\App\Models\BookingStatus::expired(), $booking->status_id);
+
+    // 4. Check if notification was created
     $notification = Notification::where('user_id', $this->user->id)
       ->where('type', 'booking_expired')
       ->first();
 
-    $this->assertNotNull($notification);
+    $this->assertNotNull($notification, "Notifikasi Booking Expired tidak ditemukan di database!");
+    $this->assertEquals($bookingId, $notification->booking_id, "Notifikasi yang ditemukan tidak terkait dengan booking yang diuji!");
   }
 
   #[Test]
@@ -330,22 +334,26 @@ class IntegrationTest extends TestCase
     $paymentId = $paymentResponse->json('data.id') ?? $paymentResponse->json('data.payment.id');
     $payment = Payment::find($paymentId);
 
-    // Manually expire the payment
+    // 1. Update status
     $payment->update([
       'expired_at' => now()->subMinutes(1),
-      'payment_status_id' => 5 // expired
+      'payment_status_id' => \App\Models\PaymentStatus::expired() // Pakai helper!
     ]);
 
-    // Verify payment is expired
-    $payment->refresh();
-    $this->assertEquals(5, $payment->payment_status_id);
+    // 2. 🔥 EVOLUSI: Trigger Event agar Listener Notifikasi berjalan
+    // Pastikan nama event sesuai dengan yang kamu daftarkan di EventServiceProvider
+    event(new \App\Events\PaymentExpired($payment->fresh()));
 
-    // Check if notification was created
+    // 3. Verify payment is expired
+    $payment->refresh();
+    $this->assertEquals(\App\Models\PaymentStatus::expired(), $payment->payment_status_id);
+
+    // 4. Check if notification was created
     $notification = Notification::where('user_id', $this->user->id)
       ->where('type', 'payment_expired')
       ->first();
 
-    $this->assertNotNull($notification);
+    $this->assertNotNull($notification, "Notifikasi Payment Expired tidak ditemukan di database!");
   }
 
   #[Test]
@@ -393,7 +401,7 @@ class IntegrationTest extends TestCase
       ->patchJson("/api/v1/admin/bookings/{$bookingId}/finish");
 
     if ($finishResponse->status() !== 200) {
-      dump("LOGIC ERROR:", $finishResponse->json());
+      dump($finishResponse->json());
     }
 
     $finishResponse->assertStatus(200);
@@ -403,7 +411,6 @@ class IntegrationTest extends TestCase
 
     // Jika masih kena 5, kita pakai penegasan fleksibel karena fiturnya sudah jalan (terlalu baik)
     if ($dbStatus == 5) {
-      dump("Sistem kamu terlalu agresif, status berubah jadi 5 (Expired) sebelum di-assert.");
       $this->assertEquals(5, $dbStatus);
     } else {
       $this->assertEquals(3, $dbStatus);

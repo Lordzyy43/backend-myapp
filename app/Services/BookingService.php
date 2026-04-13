@@ -64,7 +64,7 @@ class BookingService
           throw \Illuminate\Validation\ValidationException::withMessages(['promo_code' => ['Promo code is not active']]);
         }
 
-        $today = now()->toDateString();
+        $today = \Carbon\Carbon::today()->format('Y-m-d');
         if ($promo->start_date->format('Y-m-d') > $today || $promo->end_date->format('Y-m-d') < $today) {
           throw \Illuminate\Validation\ValidationException::withMessages(['promo_code' => ['Promo code has expired']]);
         }
@@ -161,31 +161,52 @@ class BookingService
   /**
    * 🔥 CANCEL BOOKING (USER)
    */
-  // app/Services/BookingService.php
 
   public function cancel(Booking $booking): Booking
   {
     return DB::transaction(function () use ($booking) {
       $booking = $this->lockBooking($booking);
 
-      // Forbidden to cancel finished booking
+      // 1. Guard Check
       if ($booking->status_id == BookingStatus::finished()) {
         throw new \Exception('Tidak bisa cancel booking yang sudah selesai');
       }
 
+      // 2. Prepare IDs for Debugging
+      $cancelledStatusId = BookingStatus::cancelled();
+      $cancelledPaymentId = PaymentStatus::where('status_name', 'cancelled')->value('id');
+
+      // Log sebelum eksekusi
+      \Log::info("Attempting cancel: Booking ID {$booking->id}. Target Booking Status: {$cancelledStatusId}, Target Payment Status: {$cancelledPaymentId}");
+
+      // 3. Update status booking
       $booking->update([
-        'status_id' => BookingStatus::cancelled()
+        'status_id' => $cancelledStatusId
       ]);
 
-      // 🔥 WAJIB: Update juga status payment-nya agar Test Hijau
+      // 4. Update status payment
       if ($booking->payment) {
         $booking->payment->update([
-          'payment_status_id' => PaymentStatus::where('status_name', 'cancelled')->value('id')
+          'payment_status_id' => $cancelledPaymentId
         ]);
       }
 
+      // 5. Detach
       $booking->timeSlots()->detach();
 
+      // 6. Refresh & Verify
+      $booking->refresh();
+
+      // 🔥 DEBUG CHECK: Jika status tidak sesuai, log ini akan sangat membantu
+      if ($booking->status_id != $cancelledStatusId) {
+        \Log::error("DEBUG ERROR: Status mismatch! Expected {$cancelledStatusId}, Got {$booking->status_id}");
+      }
+
+      if ($booking->payment && $booking->payment->payment_status_id != $cancelledPaymentId) {
+        \Log::error("DEBUG ERROR: Payment Status mismatch! Expected {$cancelledPaymentId}, Got {$booking->payment->payment_status_id}");
+      }
+
+      // 7. Event Dispatch
       event(new \App\Events\BookingCancelled($booking));
 
       return $booking;
