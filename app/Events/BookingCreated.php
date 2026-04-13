@@ -10,20 +10,9 @@ class BookingCreated
 {
     use Dispatchable, SerializesModels;
 
-    /**
-     * 🔥 Data utama event
-     */
     public Booking $booking;
 
-    /**
-     * 🔥 Optional metadata (future-proof)
-     */
-    public ?array $meta;
-
-    /**
-     * Create a new event instance.
-     */
-    public function __construct(Booking $booking, ?array $meta = null)
+    public function __construct(Booking $booking)
     {
         $this->booking = $booking->load([
             'user',
@@ -31,6 +20,5 @@ class BookingCreated
             'timeSlots',
             'status'
         ]);
-        $this->meta = $meta;
     }
 }

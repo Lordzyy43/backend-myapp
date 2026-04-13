@@ -14,7 +14,11 @@ class BookingApproved
 
     public function __construct(Booking $booking)
     {
-        // 🔥 optional: load relasi biar siap dipakai di listener
-        $this->booking = $booking->load(['user', 'court', 'timeSlots', 'status']);
+        $this->booking = $booking->load([
+            'user',
+            'court',
+            'timeSlots',
+            'status'
+        ]);
     }
 }

@@ -14,7 +14,6 @@ class PaymentCancelled
 
     public function __construct(Payment $payment)
     {
-        // 🔥 load relasi penting biar listener gak query ulang
         $this->payment = $payment->load([
             'booking.user',
             'status'

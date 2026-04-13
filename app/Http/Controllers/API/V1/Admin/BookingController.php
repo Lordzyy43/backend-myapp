@@ -74,7 +74,7 @@ class BookingController extends Controller
     switch ($method) {
       case 'approve':
         if ($status === 'confirmed') {
-          throw new \Exception("Booking sudah dalam status confirmed.");
+          return;
         }
         break;
 
