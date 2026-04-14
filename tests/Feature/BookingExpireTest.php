@@ -98,7 +98,9 @@ class BookingExpireTest extends TestCase
     // Attach time slot to expired booking with pivot data
     $this->expiredBooking->timeSlots()->attach($this->timeSlot->id, [
       'court_id' => $this->court->id,
-      'booking_date' => $this->expiredBooking->booking_date
+      'booking_date' => $this->expiredBooking->booking_date,
+      'created_at' => now(),
+      'updated_at' => now()
     ]);
 
     // 6. CREATE PAYMENT FOR EXPIRED BOOKING
@@ -120,7 +122,7 @@ class BookingExpireTest extends TestCase
       'user_id' => $this->user->id,
       'court_id' => $this->court->id,
       'booking_code' => 'CONFIRM-' . rand(10000, 99999),
-      'booking_date' => now()->addDays(1)->toDateString(),
+      'booking_date' => now()->addDays(2)->toDateString(),
       'status_id' => $confirmedStatus->id,
       'total_price' => 160000,
       'expires_at' => now()->addHours(24),
@@ -129,7 +131,9 @@ class BookingExpireTest extends TestCase
 
     $this->confirmedBooking->timeSlots()->attach($this->timeSlot->id, [
       'court_id' => $this->court->id,
-      'booking_date' => $this->confirmedBooking->booking_date
+      'booking_date' => $this->confirmedBooking->booking_date,
+      'created_at' => now(),
+      'updated_at' => now()
     ]);
   }
 
@@ -261,10 +265,19 @@ class BookingExpireTest extends TestCase
   #[Test]
   public function expire_command_handles_chunked_processing()
   {
-    // Create multiple expired bookings to test chunking (chunk size: 50)
+    // Create multiple expired bookings to test chunking
     $pendingStatus = BookingStatus::where('status_name', 'pending')->first();
 
     for ($i = 0; $i < 3; $i++) {
+      // 1. Buat TimeSlot unik per iterasi agar tidak melanggar unique constraint
+      $uniqueSlot = TimeSlot::create([
+        'start_time' => sprintf('%02d:00', 10 + $i),
+        'end_time'   => sprintf('%02d:00', 11 + $i),
+        'order_index' => 10 + $i,
+        'is_active'  => true
+      ]);
+
+      // 2. Buat Booking
       $booking = Booking::create([
         'user_id' => $this->user->id,
         'court_id' => $this->court->id,
@@ -275,14 +288,22 @@ class BookingExpireTest extends TestCase
         'expires_at' => now()->subHours(1),
         'booking_source' => 'mobile'
       ]);
-      $booking->timeSlots()->attach($this->timeSlot->id);
+
+      // 3. Attach dengan data pivot yang lengkap
+      $booking->timeSlots()->attach($uniqueSlot->id, [
+        'court_id' => $this->court->id,
+        'booking_date' => $booking->booking_date,
+        'created_at' => now(),
+        'updated_at' => now()
+      ]);
     }
 
-    $this->artisan('booking:expire');
+    // 4. Jalankan command
+    $this->artisan('booking:expire')->assertExitCode(0);
 
-    // Check all expired bookings are processed
+    // 5. Assert hasil
     $expiredCount = Booking::where('status_id', BookingStatus::where('status_name', 'expired')->first()->id)->count();
-    $this->assertGreaterThanOrEqual(4, $expiredCount); // 1 original + 3 new
+    $this->assertGreaterThanOrEqual(4, $expiredCount); // 1 dari setUp + 3 baru
   }
 
   #[Test]

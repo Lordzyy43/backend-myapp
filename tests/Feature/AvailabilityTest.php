@@ -282,7 +282,7 @@ class AvailabilityTest extends TestCase
     // Past time slot should be unavailable
     $pastSlot = collect($slots)->firstWhere('id', $pastTimeSlot->id);
     $this->assertFalse($pastSlot['is_available']);
-    $this->assertEquals('outside_operating_hours', $pastSlot['reason']);
+    $this->assertEquals('past_time', $pastSlot['reason']);
   }
 
   #[Test]

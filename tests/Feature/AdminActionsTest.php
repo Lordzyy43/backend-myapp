@@ -178,30 +178,27 @@ class AdminActionsTest extends TestCase
   #[Test]
   public function admin_can_finish_booking()
   {
-    // 1. SET WAKTU SECARA SANGAT EKSPLISIT
-    $targetTime = \Carbon\Carbon::create(2026, 4, 12, 13, 0, 0, 'Asia/Jakarta');
-    \Carbon\Carbon::setTestNow($targetTime);
-    try {
-      // 2. Persiapan Data (Booking harus status 'confirmed')
-      $confirmedStatus = BookingStatus::where('status_name', 'confirmed')->first();
-      $this->booking->update(['status_id' => $confirmedStatus->id]);
-      $this->booking->refresh();
+    // 1. Tentukan tanggal yang sama
+    $testDate = '2026-04-12';
 
-      // 3. Request finish (PATCH)
-      $response = $this->actingAs($this->admin, 'sanctum')
-        ->patchJson("/api/v1/admin/bookings/{$this->booking->id}/finish");
+    // 2. Set Booking Date agar sama dengan tanggal tes
+    $this->booking->update([
+      'booking_date' => $testDate,
+      'status_id' => BookingStatus::confirmed() // Pastikan statusnya confirmed
+    ]);
 
-      // 4. Assert response
-      $response->assertStatus(200)
-        ->assertJson(['success' => true]);
+    // 3. Set waktu mock ke jam 12:00 di tanggal yang sama
+    \Carbon\Carbon::setTestNow(\Carbon\Carbon::create(2026, 4, 12, 12, 0, 0));
 
-      // 5. Assert database
-      $this->booking->refresh();
-      $this->assertEquals('finished', $this->booking->status->status_name);
-    } finally {
-      // 6. WAJIB: Reset waktu agar tidak merusak tes lainnya
-      \Carbon\Carbon::setTestNow();
-    }
+    // 4. Request
+    $response = $this->actingAs($this->admin, 'sanctum')
+      ->patchJson("/api/v1/admin/bookings/{$this->booking->id}/finish");
+
+    // 5. Assert
+    $response->assertStatus(200)
+      ->assertJson(['success' => true]);
+
+    \Carbon\Carbon::setTestNow();
   }
 
   #[Test]

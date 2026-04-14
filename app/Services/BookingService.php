@@ -223,8 +223,7 @@ class BookingService
         $booking = $this->lockBooking($booking);
 
         $allowedStatuses = [
-          \App\Models\BookingStatus::pending(),
-          \App\Models\BookingStatus::confirmed()
+          \App\Models\BookingStatus::pending()
         ];
 
         if (!in_array($booking->status_id, $allowedStatuses)) {
