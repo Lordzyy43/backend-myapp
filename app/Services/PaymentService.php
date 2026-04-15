@@ -9,6 +9,7 @@ use App\Models\BookingStatus;
 use App\Models\PaymentStatus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 
 /**
  * PaymentService
@@ -31,35 +32,42 @@ class PaymentService
   public function createPayment(Booking $booking, array $data): Payment
   {
     return DB::transaction(function () use ($booking, $data) {
-      try {
-        // Check if payment already exists
-        $existingPayment = Payment::where('booking_id', $booking->id)
-          ->whereIn('status_id', [PaymentStatus::pending(), PaymentStatus::paid()])
-          ->first();
 
-        if ($existingPayment) {
-          throw new \Exception('Payment already exists for this booking');
-        }
+      // 🔥 LOCK BOOKING
+      $booking = Booking::where('id', $booking->id)->lockForUpdate()->first();
 
-        // Create new payment record
-        $payment = Payment::create([
-          'booking_id' => $booking->id,
-          'status_id' => PaymentStatus::pending(),
-          'amount' => $booking->total_price,
-          'payment_method' => $data['payment_method'] ?? 'bank_transfer',
-          'transaction_id' => $data['transaction_id'] ?? null,
-          'payment_proof' => $data['payment_proof'] ?? null,
-          'expires_at' => now()->addMinutes(PaymentConstants::PAYMENT_EXPIRY_MINUTES),
-          'verified_at' => null,
+      // 🔥 VALIDASI STATUS BOOKING
+      if ($booking->status_id !== BookingStatus::pending()) {
+        throw ValidationException::withMessages([
+          'payment' => ['Payment can only be created for pending booking']
         ]);
-
-        Log::info("Payment created for booking #{$booking->id}", ['payment_id' => $payment->id]);
-
-        return $payment;
-      } catch (\Exception $e) {
-        Log::error("Failed to create payment for booking #{$booking->id}: {$e->getMessage()}");
-        throw $e;
       }
+
+      // 🔥 CEK EXISTING PAYMENT
+      $existingPayment = Payment::where('booking_id', $booking->id)
+        ->whereIn('status_id', [
+          PaymentStatus::pending(),
+          PaymentStatus::paid()
+        ])
+        ->lockForUpdate()
+        ->first();
+
+      if ($existingPayment) {
+        throw ValidationException::withMessages([
+          'payment' => ['Payment already exists']
+        ]);
+      }
+
+      return Payment::create([
+        'booking_id' => $booking->id,
+        'status_id' => PaymentStatus::pending(),
+        'amount' => $booking->final_price ?? $booking->total_price,
+        'payment_method' => $data['payment_method'] ?? 'bank_transfer',
+        'transaction_id' => $data['transaction_id'] ?? null,
+        'payment_proof' => $data['payment_proof'] ?? null,
+        'expires_at' => now()->addMinutes(PaymentConstants::PAYMENT_EXPIRY_MINUTES),
+        'verified_at' => null,
+      ]);
     });
   }
 
@@ -74,36 +82,40 @@ class PaymentService
   public function confirmPayment(Payment $payment, array $verificationData = []): Payment
   {
     return DB::transaction(function () use ($payment, $verificationData) {
-      try {
-        // Check if payment is still valid
-        if ($payment->isExpired()) {
-          $payment->update(['status_id' => PaymentStatus::expired()]);
-          throw new \Exception('Payment has expired');
-        }
 
-        if ($payment->status_id != PaymentStatus::pending()) {
-          throw new \Exception('Payment has already been processed');
-        }
+      $payment = Payment::where('id', $payment->id)
+        ->lockForUpdate()
+        ->with('booking')
+        ->first();
 
-        // Update payment status
-        $payment->update([
-          'status_id' => PaymentStatus::paid(),
-          'verified_at' => now(),
-          'verification_data' => $verificationData,
+      // 🔥 EXPIRED CHECK
+      if ($payment->isExpired()) {
+        $payment->update(['status_id' => PaymentStatus::expired()]);
+
+        throw ValidationException::withMessages([
+          'payment' => ['Payment has expired']
         ]);
-
-        // Update booking status to confirmed
-        $payment->booking->update([
-          'status_id' => BookingStatus::confirmed(),
-        ]);
-
-        Log::info("Payment confirmed for booking #{$payment->booking_id}", ['payment_id' => $payment->id]);
-
-        return $payment;
-      } catch (\Exception $e) {
-        Log::error("Failed to confirm payment #{$payment->id}: {$e->getMessage()}");
-        throw $e;
       }
+
+      // 🔥 STATUS CHECK
+      if ($payment->status_id !== PaymentStatus::pending()) {
+        throw ValidationException::withMessages([
+          'payment' => ['Payment cannot be processed']
+        ]);
+      }
+
+      $payment->update([
+        'status_id' => PaymentStatus::paid(),
+        'verified_at' => now(),
+        'verification_data' => $verificationData,
+      ]);
+
+      // 🔥 UPDATE BOOKING
+      $payment->booking->update([
+        'status_id' => BookingStatus::confirmed(),
+      ]);
+
+      return $payment;
     });
   }
 
@@ -117,19 +129,19 @@ class PaymentService
   public function cancelPayment(Payment $payment, string $reason = ''): Payment
   {
     return DB::transaction(function () use ($payment, $reason) {
-      if ($payment->isCancelled() || $payment->isRefunded()) {
-        throw new \Exception('Payment cannot be cancelled in current state');
+
+      $payment = Payment::where('id', $payment->id)->lockForUpdate()->first();
+
+      if ($payment->status_id !== PaymentStatus::pending()) {
+        throw ValidationException::withMessages([
+          'payment' => ['Payment cannot be cancelled']
+        ]);
       }
 
       $payment->update([
         'status_id' => PaymentStatus::cancelled(),
         'cancellation_reason' => $reason,
         'cancelled_at' => now(),
-      ]);
-
-      Log::info("Payment cancelled for booking #{$payment->booking_id}", [
-        'payment_id' => $payment->id,
-        'reason' => $reason,
       ]);
 
       return $payment;

@@ -95,19 +95,24 @@ class PaymentController extends Controller
 
     public function confirm(Request $request, $id)
     {
-        $payment = Payment::with('booking')->findOrFail($id);
+        return DB::transaction(function () use ($request, $id) {
 
-        $this->authorize('update', $payment);
+            // 🔒 Ambil data + LOCK
+            $payment = Payment::with('booking')
+                ->lockForUpdate()
+                ->findOrFail($id);
 
-        // Business Rule: Jangan proses jika sudah dikonfirmasi
-        if ($payment->payment_status_id === 2) {
-            return response()->json([
-                'message' => 'Payment has already been processed'
-            ], 422);
-        }
+            $this->authorize('update', $payment);
 
-        DB::transaction(function () use ($payment, $request) {
-            // 1. Update status payment ke 2 (Paid/Confirmed)
+            // 🔥 VALIDASI HARUS DI DALAM TRANSACTION
+            if ($payment->payment_status_id === 2) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Payment has already been processed'
+                ], 422);
+            }
+
+            // ✅ Update payment
             $payment->update([
                 'payment_status_id' => 2,
                 'transaction_id' => $request->transaction_id,
@@ -115,21 +120,19 @@ class PaymentController extends Controller
                 'paid_at' => now()
             ]);
 
-            // 🔥 2. UPDATE BOOKING STATUS (PENTING!)
-            // Tanpa ini, status booking tetap 'pending' dan test akan gagal
+            // ✅ Update booking
             $payment->booking->update([
-                'status_id' => 2 // Confirmed
+                'status_id' => 2
             ]);
 
-            // 🔥 3. TRIGGER EVENT (AGAR NOTIFIKASI DIBUAT)
-            // Ini yang akan memicu SendBookingApprovedNotification
+            // ✅ Event
             event(new \App\Events\BookingApproved($payment->booking));
-        });
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Payment and Booking have been confirmed'
-        ]);
+            return response()->json([
+                'success' => true,
+                'message' => 'Payment and Booking have been confirmed'
+            ]);
+        });
     }
 
     /**

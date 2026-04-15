@@ -13,15 +13,10 @@ use Illuminate\Support\Str;
 class UserFactory extends Factory
 {
     /**
-     * The current password being used by the factory.
+     * Cache password biar tidak hash berulang
      */
     protected static ?string $password;
 
-    /**
-     * Define the model's default state.
-     *
-     * @return array<string, mixed>
-     */
     public function definition(): array
     {
         return [
@@ -30,24 +25,46 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
-            // Tambahkan baris di bawah ini:
-            'role_id' => \App\Models\Role::where('role_name', 'user')->first()?->id,
+
+            /**
+             * 🔥 FIX: gunakan constant (deterministic)
+             */
+            'role_id' => User::ROLE_USER,
         ];
     }
 
-    // Tambahkan state khusus Admin
+    /**
+     * =========================
+     * STATE: ADMIN
+     * =========================
+     */
     public function admin(): static
     {
-        return $this->state(fn(array $attributes) => [
-            'role_id' => \App\Models\Role::where('role_name', 'admin')->first()?->id,
+        return $this->state(fn() => [
+            'role_id' => User::ROLE_ADMIN,
         ]);
     }
+
     /**
-     * Indicate that the model's email address should be unverified.
+     * =========================
+     * STATE: OWNER
+     * =========================
+     */
+    public function owner(): static
+    {
+        return $this->state(fn() => [
+            'role_id' => User::ROLE_OWNER,
+        ]);
+    }
+
+    /**
+     * =========================
+     * STATE: UNVERIFIED
+     * =========================
      */
     public function unverified(): static
     {
-        return $this->state(fn(array $attributes) => [
+        return $this->state(fn() => [
             'email_verified_at' => null,
         ]);
     }
