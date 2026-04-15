@@ -13,6 +13,13 @@ class User extends Authenticatable implements MustVerifyEmail
 {
     use HasApiTokens, HasFactory, Notifiable;
 
+    /**
+     * 🔒 ROLE CONSTANTS (ANTI MAGIC NUMBER)
+     */
+    public const ROLE_ADMIN = 1;
+    public const ROLE_USER = 2;
+    public const ROLE_OWNER = 3;
+
     protected $fillable = [
         'name',
         'email',
@@ -35,7 +42,9 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
+     * =========================
      * RELATIONSHIPS
+     * =========================
      */
     public function role()
     {
@@ -68,32 +77,39 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
-     * 🔥 CORE ROLE CHECK (FLEXIBLE)
-     */
-    public function hasRole(string $roleName): bool
-    {
-        if (!$this->relationLoaded('role')) {
-            $this->load('role');
-        }
-
-        return $this->role?->role_name === $roleName;
-    }
-
-    /**
-     * 🔥 HELPER METHODS (CLEAN)
+     * =========================
+     * CORE ROLE CHECK (FAST & SAFE)
+     * =========================
      */
     public function isAdmin(): bool
     {
-        return $this->hasRole('admin');
+        return $this->role_id === self::ROLE_ADMIN;
     }
 
     public function isOwner(): bool
     {
-        return $this->hasRole('owner');
+        return $this->role_id === self::ROLE_OWNER;
     }
 
     public function isUser(): bool
     {
-        return $this->hasRole('user');
+        return $this->role_id === self::ROLE_USER;
+    }
+
+    /**
+     * =========================
+     * FLEXIBLE ROLE CHECK (OPTIONAL)
+     * =========================
+     * Dipakai hanya kalau butuh nama role
+     * (bukan untuk middleware / security)
+     */
+    public function hasRole(string $roleName): bool
+    {
+        // fallback aman kalau relation belum load
+        if (!$this->relationLoaded('role')) {
+            $this->loadMissing('role');
+        }
+
+        return $this->role?->role_name === $roleName;
     }
 }

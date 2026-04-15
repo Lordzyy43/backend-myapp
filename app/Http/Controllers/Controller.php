@@ -19,7 +19,7 @@ abstract class Controller
         return response()->json($response, $code);
     }
 
-    protected function error(string $message = 'Error', $errors = null, int $code = 400): JsonResponse
+    protected function error(string $message = 'Error', $errors = null, int $code = 422): JsonResponse
     {
         $response = [
             'success' => false,

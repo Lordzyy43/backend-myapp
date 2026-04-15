@@ -43,9 +43,20 @@ abstract class TestCase extends BaseTestCase
      */
     private function setupRoles(): void
     {
-        Role::firstOrCreate(['role_name' => 'user']);
-        Role::firstOrCreate(['role_name' => 'admin']);
-        Role::firstOrCreate(['role_name' => 'owner']);
+        Role::updateOrCreate(
+            ['id' => 1],
+            ['role_name' => 'admin']
+        );
+
+        Role::updateOrCreate(
+            ['id' => 2],
+            ['role_name' => 'user']
+        );
+
+        Role::updateOrCreate(
+            ['id' => 3],
+            ['role_name' => 'owner']
+        );
     }
 
     /**

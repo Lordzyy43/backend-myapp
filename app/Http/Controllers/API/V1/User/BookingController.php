@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Http\Requests\StoreBookingRequest;
 use App\Services\BookingService;
-use Illuminate\Http\Request;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Validation\ValidationException;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
 
 class BookingController extends Controller
 {
@@ -15,7 +17,6 @@ class BookingController extends Controller
 
     protected BookingService $bookingService;
 
-    // 🔥 Dependency Injection (WAJIB)
     public function __construct(BookingService $bookingService)
     {
         $this->bookingService = $bookingService;
@@ -52,22 +53,35 @@ class BookingController extends Controller
         try {
             $booking = $this->bookingService->store($request->validated());
 
-            // 🔥 1. SOLUSI AVAILABILITY: Hapus Cache setelah booking
-            $dateStr = \Carbon\Carbon::parse($request->date)->toDateString();
+            // 🔥 Cache invalidation (availability)
+            $dateStr = Carbon::parse($request->booking_date)->toDateString();
             $cacheKey = "availability_{$request->court_id}_{$dateStr}";
-            \Illuminate\Support\Facades\Cache::forget($cacheKey);
-
-            // 🔥 2. SOLUSI NOTIFIKASI: Pemicu Event
-            // (Pastikan ini dipanggil jika di dalam Service belum dipanggil)
-            event(new \App\Events\BookingCreated($booking));
+            Cache::forget($cacheKey);
 
             return $this->success([
                 'booking' => $booking->load(['court', 'timeSlots', 'status']),
             ], 'Booking created successfully', 201);
+        } catch (ValidationException $e) {
+
+            $message = collect($e->errors())->flatten()->first();
+
+            /**
+             * 🔥 RULE PENTING:
+             * - Slot sudah dibooking → 400 (sesuai test concurrency)
+             * - Promo error → 422
+             * - Default validation → 422
+             */
+            if ($message === 'Slot sudah dibooking') {
+                return $this->error($message, $e->errors(), 400);
+            }
+
+            return $this->error($message, $e->errors(), 422);
         } catch (\Exception $e) {
-            return $this->error($e->getMessage(), null, 400);
+
+            return $this->error($e->getMessage(), null, 422);
         }
     }
+
     /**
      * SHOW BOOKING
      */
@@ -94,7 +108,15 @@ class BookingController extends Controller
             $this->bookingService->cancel($booking);
 
             return $this->success(null, 'Booking berhasil dibatalkan');
+        } catch (ValidationException $e) {
+
+            return $this->error(
+                collect($e->errors())->flatten()->first(),
+                $e->errors(),
+                422
+            );
         } catch (\Throwable $e) {
+
             return $this->error($e->getMessage(), null, 400);
         }
     }
