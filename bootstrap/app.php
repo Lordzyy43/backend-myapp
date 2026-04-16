@@ -8,6 +8,7 @@ use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\Log;
 
 use App\Providers\AppServiceProvider;
@@ -40,7 +41,6 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $exceptions->render(function (Throwable $e, $request) {
 
-            // 🔥 TRACE ID (untuk debugging production)
             $traceId = uniqid('ERR_');
 
             Log::error("[$traceId] " . $e->getMessage(), [
@@ -72,6 +72,20 @@ return Application::configure(basePath: dirname(__DIR__))
             }
 
             /**
+             * 🔥 AUTHORIZATION (403) — INI YANG KAMU KURANG
+             */
+            if ($e instanceof AuthorizationException) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Forbidden',
+                    'errors' => [
+                        'authorization' => ['You are not allowed to perform this action']
+                    ],
+                    'trace_id' => $traceId,
+                ], 403);
+            }
+
+            /**
              * 🔹 MODEL NOT FOUND (404)
              */
             if ($e instanceof ModelNotFoundException) {
@@ -84,12 +98,14 @@ return Application::configure(basePath: dirname(__DIR__))
             }
 
             /**
-             * 🔹 HTTP EXCEPTION (403, dll)
+             * 🔹 HTTP EXCEPTION (fallback)
              */
             if ($e instanceof HttpExceptionInterface) {
                 return response()->json([
                     'success' => false,
-                    'message' => $e->getMessage() ?: 'Terjadi kesalahan',
+                    'message' => $e->getStatusCode() === 403
+                        ? 'Forbidden'
+                        : ($e->getMessage() ?: 'Terjadi kesalahan'),
                     'errors' => [],
                     'trace_id' => $traceId,
                 ], $e->getStatusCode());

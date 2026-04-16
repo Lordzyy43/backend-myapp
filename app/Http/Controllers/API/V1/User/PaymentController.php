@@ -32,14 +32,16 @@ class PaymentController extends Controller
             ->paginate(10);
 
         return $this->success(
-            ['payments' => $payments],
+            $payments->items(), // 🔥 langsung array
             'List payment berhasil diambil',
             200,
             [
-                'current_page' => $payments->currentPage(),
-                'per_page' => $payments->perPage(),
-                'total' => $payments->total(),
-                'last_page' => $payments->lastPage(),
+                'meta' => [
+                    'current_page' => $payments->currentPage(),
+                    'per_page' => $payments->perPage(),
+                    'total' => $payments->total(),
+                    'last_page' => $payments->lastPage(),
+                ]
             ]
         );
     }
@@ -65,7 +67,7 @@ class PaymentController extends Controller
             }
 
             if ($booking->status_id !== BookingStatus::pending()) {
-                return $this->error('Booking tidak valid', [], 400);
+                return $this->forbidden('Booking tidak bisa dibayar', [], 403);
             }
 
             $payment = DB::transaction(function () use ($validated, $booking) {
