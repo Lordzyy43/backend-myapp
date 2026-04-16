@@ -60,53 +60,50 @@ class PaymentController extends Controller
      */
     public function approve($id)
     {
-        $payment = Payment::findOrFail($id);
+        try {
+            $payment = Payment::findOrFail($id);
 
-        // 🔥 1. BUSINESS RULE DULU (WAJIB)
-        if ($payment->isPaid()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Payment sudah dibayar'
-            ], 400);
-        }
+            // 🔥 AUTH DULU (biar test admin lolos)
+            $this->authorize('approve', $payment);
 
-        if ($payment->isExpired()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Payment sudah expired'
-            ], 400);
-        }
+            // 🔥 BUSINESS RULE
+            if ($payment->isPaid()) {
+                return $this->error('Payment sudah dibayar', [], 400);
+            }
 
-        // 🔥 2. AUTH SETELAH VALIDASI
-        $this->authorize('approve', $payment);
+            if ($payment->isExpired()) {
+                return $this->error('Payment sudah expired', [], 400);
+            }
 
-        // 🔥 3. TRANSACTION
-        $payment = DB::transaction(function () use ($payment) {
+            $payment = DB::transaction(function () use ($payment) {
 
-            $payment->refresh(); // biar sync
+                $payment->refresh();
 
-            $now = now()->toDateTimeString(); // 🔥 FIX TEST (timestamp exact)
+                $payment->update([
+                    'payment_status_id' => PaymentStatus::paid(),
+                    'paid_at' => now()
+                ]);
 
-            $payment->update([
-                'payment_status_id' => PaymentStatus::paid(),
-                'paid_at' => $now
+                $payment->booking->update([
+                    'status_id' => BookingStatus::confirmed(),
+                    'expires_at' => null
+                ]);
+
+                return $payment->load(['booking', 'status']);
+            });
+
+            event(new \App\Events\PaymentSuccess($payment));
+
+            return $this->success($payment, 'Payment berhasil di-approve');
+        } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
+            return $this->forbidden('Forbidden access. Admin only.', [
+                'role' => ['You do not have the required admin role.']
             ]);
-
-            $payment->booking->update([
-                'status_id' => BookingStatus::confirmed(),
-                'expires_at' => null
-            ]);
-
-            return $payment->load(['booking', 'status']);
-        });
-
-        event(new \App\Events\PaymentSuccess($payment));
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Payment berhasil di-approve',
-            'data' => $payment
-        ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return $this->notFound('Payment tidak ditemukan');
+        } catch (\Exception $e) {
+            return $this->error($e->getMessage(), [], 400);
+        }
     }
 
     /**

@@ -17,20 +17,26 @@ class PaymentFlowTest extends TestCase
   use RefreshDatabase;
 
   protected $user;
+  protected $admin;
   protected $booking;
 
   protected function setUp(): void
   {
     parent::setUp();
 
-    // Seed payment statuses
+    // 1. Seed status agar relasi valid
     $this->seed(PaymentStatusSeeder::class);
 
+    // 2. Buat User biasa
     $this->user = User::factory()->create();
 
+    // 3. Buat Admin (menggunakan state admin yang baru dibuat)
+    $this->admin = User::factory()->admin()->create();
+
+    // 4. Buat Booking
     $this->booking = Booking::create([
       'user_id' => $this->user->id,
-      'court_id' => 1, // Assume exists
+      'court_id' => 1,
       'booking_date' => now()->addDays(1)->toDateString(),
       'status_id' => BookingStatus::pending(),
       'total_price' => 100000,
@@ -181,21 +187,20 @@ class PaymentFlowTest extends TestCase
       'expired_at' => now()->addMinutes(10)
     ]);
 
-    $admin = User::factory()->create();
-    $admin->update(['role_id' => 2]); // Admin role
-
-    $response = $this->actingAs($admin, 'sanctum')
+    // Kita gunakan $this->admin yang sudah didefinisikan di setUp
+    // Tidak perlu update role_id manual lagi karena sudah di-handle oleh factory()->admin()
+    $response = $this->actingAs($this->admin, 'sanctum')
       ->patchJson("/api/v1/admin/payments/{$payment->id}/approve", []);
 
+    // Assertion
     $response->assertStatus(200);
 
     $this->assertDatabaseHas('payments', [
       'id' => $payment->id,
       'payment_status_id' => PaymentStatus::paid(),
-      // 'paid_at' => now()->toDateTimeString() // Approximately
-      ]);
-      $this->assertNotNull($payment->refresh()->paid_at);
+    ]);
 
+    $this->assertNotNull($payment->refresh()->paid_at);
 
     // Check booking status updated
     $this->assertDatabaseHas('bookings', [
@@ -360,10 +365,7 @@ class PaymentFlowTest extends TestCase
       'paid_at' => now()
     ]);
 
-    $admin = User::factory()->create();
-    $admin->update(['role_id' => 2]);
-
-    $response = $this->actingAs($admin, 'sanctum')
+    $response = $this->actingAs($this->admin, 'sanctum')
       ->patchJson("/api/v1/admin/payments/{$payment->id}/approve", []);
 
     $response->assertStatus(400)
@@ -381,13 +383,10 @@ class PaymentFlowTest extends TestCase
       'payment_method' => 'bank_transfer',
       'amount' => 100000,
       'payment_status_id' => PaymentStatus::pending(),
-      'expired_at' => now()->subMinutes(1) // Expired
+      'expired_at' => now()->subMinutes(1)
     ]);
 
-    $admin = User::factory()->create();
-    $admin->update(['role_id' => 2]);
-
-    $response = $this->actingAs($admin, 'sanctum')
+    $response = $this->actingAs($this->admin, 'sanctum')
       ->patchJson("/api/v1/admin/payments/{$payment->id}/approve", []);
 
     $response->assertStatus(400)
