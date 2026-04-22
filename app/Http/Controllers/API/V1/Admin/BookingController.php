@@ -74,9 +74,14 @@ class BookingController extends Controller
     $status = $booking->status->status_name;
 
     switch ($method) {
-
       case 'approve':
-        // kalau sudah confirmed → tidak boleh diubah lagi
+        // 🔥 STANDAR INDUSTRI: Idempotency
+        // Jika status sudah 'confirmed', jangan lempar error (biarkan lolos ke Service).
+        if ($status === 'confirmed') {
+          return;
+        }
+
+        // Tetap blokir jika status selain pending (misal: sudah rejected atau cancelled)
         if ($status !== 'pending') {
           throw ValidationException::withMessages([
             'booking' => ['Booking status cannot be changed']
@@ -85,6 +90,9 @@ class BookingController extends Controller
         break;
 
       case 'reject':
+        // Idempotensi untuk reject juga (opsional tapi disarankan)
+        if ($status === 'cancelled') return;
+
         if ($status !== 'pending') {
           throw ValidationException::withMessages([
             'booking' => ['Booking status cannot be changed']
@@ -93,6 +101,9 @@ class BookingController extends Controller
         break;
 
       case 'finish':
+        // Idempotensi untuk finish
+        if ($status === 'finished') return;
+
         if ($status !== 'confirmed') {
           throw ValidationException::withMessages([
             'booking' => ['Booking status cannot be changed']

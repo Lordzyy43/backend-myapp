@@ -36,12 +36,11 @@ class PaymentController extends Controller
             'List payment berhasil diambil',
             200,
             [
-                'meta' => [
-                    'current_page' => $payments->currentPage(),
-                    'per_page' => $payments->perPage(),
-                    'total' => $payments->total(),
-                    'last_page' => $payments->lastPage(),
-                ]
+
+                'current_page' => $payments->currentPage(),
+                'per_page' => $payments->perPage(),
+                'total' => $payments->total(),
+                'last_page' => $payments->lastPage(),
             ]
         );
     }
