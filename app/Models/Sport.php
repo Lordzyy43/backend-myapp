@@ -44,6 +44,10 @@ class Sport extends Model
         return $this->hasMany(Court::class);
     }
 
+    public function venues()
+    {
+        return $this->belongsToMany(Venue::class, 'venue_sport');
+    }
     /*
     | SCOPES
     */

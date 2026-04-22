@@ -72,4 +72,9 @@ class Venue extends Model
     {
         return $this->hasMany(Review::class);
     }
+
+    public function sports()
+    {
+        return $this->belongsToMany(Sport::class, 'venue_sport');
+    }
 }

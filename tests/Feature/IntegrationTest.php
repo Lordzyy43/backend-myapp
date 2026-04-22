@@ -485,17 +485,42 @@ class IntegrationTest extends TestCase
     $paymentsResponse = $this->actingAs($this->user, 'sanctum')
       ->getJson('/api/v1/payments');
 
-    $paymentsResponse->assertStatus(200)
-      ->assertJsonStructure([
-        'success',
+
+    $paymentsResponse->assertStatus(200);
+
+    // 1. Cek struktur utama dulu
+    $paymentsResponse->assertJsonStructure([
+      'success',
+      'message',
+      'data',
+      'meta' => [
+        'current_page',
+        'per_page',
+        'total',
+        'last_page',
+      ]
+    ]);
+
+    // 2. Cek apakah 'data' berisi array (bisa kosong atau berisi item)
+    $this->assertIsArray($paymentsResponse->json('data'));
+
+    // 3. Jika ada data, cek isinya (Idempotent check)
+    if (count($paymentsResponse->json('data')) > 0) {
+      $paymentsResponse->assertJsonStructure([
         'data' => [
-          'payments' => [
-            'data'
+          '*' => [
+            'id',
+            'booking_id',
+            'payment_method',
+            'amount',
+            'transaction_id',
+            'payment_status_id',
           ]
         ]
       ]);
+    }
 
-    $payments = $paymentsResponse->json('data.payments.data');
+    $payments = $paymentsResponse->json('data');
     $this->assertCount(3, $payments);
   }
 

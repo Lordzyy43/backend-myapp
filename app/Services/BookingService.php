@@ -12,6 +12,8 @@ use App\Models\TimeSlot;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Log;
+use illuminate\Support\Facades\Auth;
 use Illuminate\Support\Carbon;
 use Exception;
 
@@ -217,38 +219,53 @@ class BookingService
    */
   public function approve(Booking $booking): Booking
   {
-    // Pastikan pakai return di depan DB::transaction
     return DB::transaction(function () use ($booking) {
       try {
+        // 1. Pessimistic Locking untuk mencegah race condition
         $booking = $this->lockBooking($booking);
 
-        $allowedStatuses = [
-          \App\Models\BookingStatus::pending()
-        ];
-
-        if (!in_array($booking->status_id, $allowedStatuses)) {
-          throw new \Exception('Hanya booking pending atau sudah dikonfirmasi pembayaran yang bisa di-approve');
+        // 2. IDEMPOTENCY CHECK
+        // Jika status sudah confirmed (ID 2), jangan lempar error.
+        // Langsung kembalikan data agar API tetap return 200 OK.
+        if ($booking->status_id === BookingStatus::confirmed()) {
+          Log::info("Booking {$booking->id} already confirmed. Skipping update.");
+          return $booking->load(['court', 'timeSlots', 'status']);
         }
 
+        // 3. VALIDASI TRANSISI STATUS (State Guard)
+        // Hanya izinkan approve jika status saat ini adalah Pending.
+        if ($booking->status_id !== BookingStatus::pending()) {
+          throw new Exception("Hanya booking dengan status PENDING yang dapat disetujui.");
+        }
+
+        // 4. VALIDASI EXPIRED
         if ($booking->isExpired()) {
-          throw new \Exception('Booking ini sudah expired');
+          throw new Exception("Tidak dapat menyetujui booking yang sudah kadaluarsa (Expired).");
         }
 
+        // 5. EKSEKUSI UPDATE
         $booking->update([
-          'status_id' => \App\Models\BookingStatus::confirmed(),
+          'status_id'   => BookingStatus::confirmed(),
           'approved_at' => now(),
-          'approved_by' => auth()->id(),
+          'approved_by' => auth()->id() ?? null, // Fallback jika dijalankan via System/Console
         ]);
 
-        $dateStr = \Carbon\Carbon::parse($booking->booking_date)->toDateString();
+        // 6. CACHE MANAGEMENT
+        // Menjamin data ketersediaan lapangan langsung terupdate di sisi client
+        $dateStr = Carbon::parse($booking->booking_date)->toDateString();
         $cacheKey = "availability_{$booking->court_id}_{$dateStr}";
         \Illuminate\Support\Facades\Cache::forget($cacheKey);
 
+        // 7. EVENT DISPATCHING
+        // Gunakan fresh() agar listener mendapatkan data terbaru dari database
         event(new \App\Events\BookingApproved($booking->fresh(['user', 'court', 'status'])));
 
         return $booking;
-      } catch (\Exception $e) {
-        \Illuminate\Support\Facades\Log::error("Approve Booking Failed: " . $e->getMessage());
+      } catch (Exception $e) {
+        Log::error("Approve Booking Failed [ID: {$booking->id}]: " . $e->getMessage(), [
+          'admin_id' => auth()->id(),
+          'stack'    => $e->getTraceAsString()
+        ]);
         throw $e;
       }
     });
