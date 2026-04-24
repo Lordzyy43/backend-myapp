@@ -1,22 +1,18 @@
 <?php
 
-namespace App\Http\Requests;
+namespace App\Http\Requests\API\V1\User;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Carbon\Carbon;
+use App\Models\TimeSlot;
 
 class StoreBookingRequest extends FormRequest
 {
-    /**
-     * Authorization (biarkan true, karena kita handle di Policy)
-     */
     public function authorize(): bool
     {
         return true;
     }
 
-    /**
-     * Validation Rules
-     */
     public function rules(): array
     {
         return [
@@ -27,23 +23,22 @@ class StoreBookingRequest extends FormRequest
                 'array',
                 'min:1',
                 function ($attribute, $value, $fail) {
-                    // Ambil tanggal booking dari input
-                    $bookingDate = \Carbon\Carbon::parse($this->booking_date);
+                    $bookingDate = Carbon::parse($this->booking_date);
 
-                    // Jika booking untuk HARI INI
                     if ($bookingDate->isToday()) {
                         $now = now();
 
-                        // Cek apakah ada slot yang jam start-nya sudah lewat
-                        $passedSlots = \App\Models\TimeSlot::whereIn('id', $value)
-                            ->get()
-                            ->filter(function ($slot) use ($now) {
-                                // Bandingkan jam sekarang dengan jam mulai slot
-                                return \Carbon\Carbon::parse($slot->start_time)->lt($now);
-                            });
+                        // Optimasi: Langsung ambil data slot yang dipilih
+                        $slots = TimeSlot::whereIn('id', $value)->get();
 
-                        if ($passedSlots->isNotEmpty()) {
-                            $fail('Beberapa slot yang dipilih sudah melewati waktu saat ini.');
+                        foreach ($slots as $slot) {
+                            // Gabungkan Tanggal + Jam Start untuk perbandingan presisi
+                            $startDateTime = Carbon::parse($bookingDate->toDateString() . ' ' . $slot->start_time);
+
+                            if ($startDateTime->lt($now)) {
+                                $fail("Slot jam {$slot->start_time} sudah terlewat. Pilih jam lain ya!");
+                                break; // Cukup satu error untuk menghentikan loop
+                            }
                         }
                     }
                 },
