@@ -16,50 +16,47 @@ class ExpireBookings extends Command
 
   public function handle()
   {
+    // 1. Ambil booking yang expired dengan relasi minimal
     Booking::where('status_id', BookingStatus::pending())
       ->where('expires_at', '<=', now())
+      ->with(['payment', 'timeSlots']) // Load relasi di awal untuk efisiensi chunk
       ->chunkById(50, function ($bookings) {
-
         foreach ($bookings as $booking) {
-
           DB::transaction(function () use ($booking) {
+            // Lock for update untuk keamanan race condition
+            $booking = Booking::where('id', $booking->id)->lockForUpdate()->first();
 
-            // 🔥 lock row langsung
-            $booking = Booking::lockForUpdate()
-              ->with(['payment', 'timeSlots'])
-              ->find($booking->id);
+            if (!$booking || $booking->status_id !== BookingStatus::pending()) return;
 
-            if (!$booking || $booking->status_id !== BookingStatus::pending()) {
-              return;
-            }
+            // Simpan info lapangan dan tanggal untuk hapus cache nanti
+            $courtId = $booking->court_id;
+            $dateStr = \Carbon\Carbon::parse($booking->booking_date)->toDateString();
 
-            // 🔥 update booking
-            $booking->update([
-              'status_id' => BookingStatus::expired()
-            ]);
+            // 🔥 1. Update Booking Status
+            $booking->update(['status_id' => BookingStatus::expired()]);
 
-            // 🔥 release slot
+            // 🔥 2. Release Slots
             $booking->timeSlots()->detach();
 
-            // 🔥 sync payment
+            // 🔥 3. Sync Payment
             if ($booking->payment && !$booking->payment->isPaid()) {
-
               $booking->payment->update([
                 'payment_status_id' => PaymentStatus::expired(),
                 'expired_at' => now()
               ]);
-
               event(new \App\Events\PaymentExpired($booking->payment));
             }
 
-            // 🔥 booking event
-            event(new \App\Events\BookingExpired($booking));
+            // 🔥 4. CACHE CLEANUP (Kritikal!)
+            // Supaya slot yang dilepas langsung muncul sebagai "Available" di aplikasi
+            \Illuminate\Support\Facades\Cache::forget("availability_{$courtId}_{$dateStr}");
 
-            Log::info("Booking expired: {$booking->id}");
+            event(new \App\Events\BookingExpired($booking));
+            Log::info("Booking Auto-Expired: {$booking->booking_code}");
           });
         }
       });
 
-    $this->info('Expire process completed');
+    $this->info('Process completed: Pending bookings have been cleared.');
   }
 }

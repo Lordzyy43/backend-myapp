@@ -97,42 +97,33 @@ class PaymentController extends Controller
     public function confirm(Request $request, $id)
     {
         return DB::transaction(function () use ($request, $id) {
-
-            // 🔒 Ambil data + LOCK
-            $payment = Payment::with('booking')
-                ->lockForUpdate()
-                ->findOrFail($id);
+            // 1. Lock data untuk keamanan tinggi
+            $payment = Payment::with('booking')->lockForUpdate()->findOrFail($id);
 
             $this->authorize('update', $payment);
 
-            // 🔥 VALIDASI HARUS DI DALAM TRANSACTION
-            if ($payment->payment_status_id === 2) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Payment has already been processed'
-                ], 422);
+            // 2. Gunakan logic dari Model (Clean Code)
+            if ($payment->isPaid()) {
+                return $this->error('Pembayaran ini sudah diproses sebelumnya.', [], 422);
             }
 
-            // ✅ Update payment
+            // 3. Eksekusi update
+            // Kita modifikasi sedikit markAsPaid di model nanti
             $payment->update([
-                'payment_status_id' => 2,
-                'transaction_id' => $request->transaction_id,
-                'notes' => $request->notes,
-                'paid_at' => now()
+                'transaction_id' => $request->transaction_id ?? $payment->transaction_id,
+                'payment_method' => $request->payment_method ?? $payment->payment_method,
+                'notes' => $request->notes
             ]);
 
-            // ✅ Update booking
-            $payment->booking->update([
-                'status_id' => 2
-            ]);
+            $payment->markAsPaid();
 
-            // ✅ Event
+            // 4. Dispatch Event
             event(new \App\Events\BookingApproved($payment->booking));
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Payment and Booking have been confirmed'
-            ]);
+            return $this->success(
+                $payment->load('status'),
+                'Pembayaran dan Booking berhasil dikonfirmasi!'
+            );
         });
     }
 

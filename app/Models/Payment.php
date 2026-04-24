@@ -66,10 +66,15 @@ class Payment extends Model
             'paid_at' => now(),
         ]);
 
-        // 🔥 update booking juga
+        // Update booking status
         $this->booking->update([
             'status_id' => BookingStatus::confirmed(),
-            'expires_at' => null
+            // Link expiry booking biasanya dihapus setelah bayar
         ]);
+
+        // 🔥 CACHE CLEANUP: Agar jadwal langsung terupdate di sisi User
+        $dateStr = \Carbon\Carbon::parse($this->booking->booking_date)->toDateString();
+        $cacheKey = "availability_{$this->booking->court_id}_{$dateStr}";
+        \Illuminate\Support\Facades\Cache::forget($cacheKey);
     }
 }
