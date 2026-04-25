@@ -24,6 +24,7 @@ use App\Http\Controllers\API\V1\Public\TimeSlotController;
 use App\Http\Controllers\API\V1\Public\AvailabilityController;
 use App\Http\Controllers\API\V1\Public\ReviewController;
 use App\Http\Controllers\API\V1\Public\PromoController;
+use App\Http\Controllers\API\V1\Public\MidtransWebhookController;
 
 // User
 use App\Http\Controllers\API\V1\User\BookingController;
@@ -100,7 +101,7 @@ Route::prefix('v1')->group(function () {
   | SYSTEM ROUTES
   |--------------------------------------------------------------------------
   */
-  Route::post('/payments/webhook', [PaymentController::class, 'webhook']);
+  Route::post('/webhooks/midtrans', [MidtransWebhookController::class, 'handle']);
 
   /*
   |--------------------------------------------------------------------------

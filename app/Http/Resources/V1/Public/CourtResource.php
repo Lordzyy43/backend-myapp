@@ -2,9 +2,9 @@
 
 namespace App\Http\Resources\V1\Public;
 
-use App\Http\Resources\V1\Shared\ImageResource;
-use App\Http\Resources\V1\Shared\SportResource;
-use App\Http\Resources\V1\Shared\MaintenanceResource;
+use App\Http\Resources\V1\Public\ImageResource;
+use App\Http\Resources\V1\Public\SportResource;
+use App\Http\Resources\V1\Public\MaintenenceResource;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -19,26 +19,30 @@ class CourtResource extends JsonResource
             'price_per_hour' => (float) $this->price_per_hour,
             'formatted_price' => 'Rp ' . number_format($this->price_per_hour, 0, ',', '.'),
 
+            // Info Venue (Ditambahkan agar user tahu ini lapangan milik siapa)
+            'venue' => new VenueResource($this->whenLoaded('venue')),
+
             // Info Olahraga
             'sport' => new SportResource($this->whenLoaded('sport')),
 
-            // Statistik
-            'rating' => round($this->reviews()->avg('rating') ?? 0, 1),
+            // Statistik (Gunakan aggregate withAvg dari Controller)
+            'rating' => round($this->reviews_avg_rating ?? 0, 1),
 
             // Foto-foto khusus lapangan ini
             'images' => ImageResource::collection($this->whenLoaded('images')),
 
             // Status Ketersediaan Bisnis
-            'is_active' => $this->isAvailable(),
+            'status' => $this->status, // Menampilkan status asli (active/inactive)
+            'is_active' => $this->status === 'active',
 
-            // Maintenance (Hanya tampilkan jika sedang ada perbaikan)
-            'current_maintenance' => MaintenanceResource::collection(
-                $this->whenLoaded('maintenances', function () {
-                    return $this->maintenances()->where('start_date', '<=', now())
-                        ->where('end_date', '>=', now())
-                        ->get();
-                })
-            ),
+            // Maintenance (Logika tetap sama, tapi dioptimalkan pemanggilannya)
+            'current_maintenance' => $this->when($this->relationLoaded('maintenances'), function () {
+                $now = now();
+                $activeMaintenance = $this->maintenances
+                    ->where('start_date', '<=', $now)
+                    ->where('end_date', '>=', $now);
+                return MaintenanceResource::collection($activeMaintenance);
+            }),
         ];
     }
 }

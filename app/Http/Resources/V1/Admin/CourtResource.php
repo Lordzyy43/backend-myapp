@@ -2,9 +2,9 @@
 
 namespace App\Http\Resources\V1\Admin;
 
-use App\Http\Resources\V1\Shared\ImageResource;
-use App\Http\Resources\V1\Shared\SportResource;
-use App\Http\Resources\V1\Shared\MaintenanceResource;
+use App\Http\Resources\V1\Admin\ImageResource;
+use App\Http\Resources\V1\Admin\SportResource;
+use App\Http\Resources\V1\Admin\MaintenanceResource;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 

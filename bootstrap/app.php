@@ -28,6 +28,10 @@ return Application::configure(basePath: dirname(__DIR__))
             // future:
             // 'is_owner' => \App\Http\Middleware\IsOwner::class,
         ]);
+        
+        $middleware->validateCsrfTokens(except: [
+            'api/webhooks/midtrans',
+        ]);
     })
     ->withSchedule(function (Schedule $schedule): void {
         $schedule->command('booking:expire')->everyMinute();

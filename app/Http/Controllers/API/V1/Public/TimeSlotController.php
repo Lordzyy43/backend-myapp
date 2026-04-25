@@ -3,29 +3,33 @@
 namespace App\Http\Controllers\API\V1\Public;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\V1\Public\TimeSlotResource; // Import Resource
 use App\Models\TimeSlot;
 
 class TimeSlotController extends Controller
 {
-    /**
-     * LIST SLOT (PUBLIC)
-     */
+
+    // Public API untuk mendapatkan daftar time slot yang aktif
     public function index()
     {
         try {
-            $slots = TimeSlot::active()
+            // Kita ambil slot yang aktif dan urutkan berdasarkan waktu mulai
+            $slots = TimeSlot::where('is_active', true)
+                ->orderBy('order_index')
                 ->orderBy('start_time')
                 ->get();
 
-            return $this->success($slots, 'List time slot berhasil diambil');
+            return $this->success(
+                TimeSlotResource::collection($slots),
+                'List time slot berhasil diambil'
+            );
         } catch (\Exception $e) {
             return $this->error('Gagal mengambil time slots', $e->getMessage(), 500);
         }
     }
 
-    /**
-     * DETAIL SLOT (PUBLIC)
-     */
+    // Public API untuk mendapatkan detail time slot berdasarkan ID
+
     public function show(string $id)
     {
         try {
@@ -35,7 +39,10 @@ class TimeSlotController extends Controller
                 return $this->notFound('Time slot tidak ditemukan');
             }
 
-            return $this->success($slot, 'Detail time slot berhasil diambil');
+            return $this->success(
+                new TimeSlotResource($slot),
+                'Detail time slot berhasil diambil'
+            );
         } catch (\Exception $e) {
             return $this->error('Gagal mengambil data slot', $e->getMessage(), 500);
         }

@@ -5,14 +5,12 @@ namespace App\Http\Controllers\API\V1\User;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
-
 use App\Models\Payment;
 use App\Models\Booking;
 use App\Models\PaymentStatus;
 use App\Models\BookingStatus;
-
 use App\Http\Requests\StorePaymentRequest;
-
+use App\Http\Resources\V1\User\PaymentResource; // Import Resource
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 
 class PaymentController extends Controller
@@ -20,7 +18,7 @@ class PaymentController extends Controller
     use AuthorizesRequests;
 
     /**
-     * LIST PAYMENT
+     * LIST PAYMENT (USER)
      */
     public function index()
     {
@@ -31,29 +29,21 @@ class PaymentController extends Controller
             ->latest()
             ->paginate(10);
 
+        // Langsung kirim collection Resource, Base Controller akan urus Meta-nya
         return $this->success(
-            $payments->items(), // 🔥 langsung array
-            'List payment berhasil diambil',
-            200,
-            [
-
-                'current_page' => $payments->currentPage(),
-                'per_page' => $payments->perPage(),
-                'total' => $payments->total(),
-                'last_page' => $payments->lastPage(),
-            ]
+            PaymentResource::collection($payments),
+            'List payment berhasil diambil'
         );
     }
 
     /**
      * CREATE PAYMENT
      */
-    public function store(StorePaymentRequest $request)
+    public function store(StoreBookingRequest $request)
     {
         try {
             $validated = $request->validated();
-
-            $booking = Booking::findOrFail($validated['booking_id']);
+            $booking = Booking::with(['user', 'court'])->findOrFail($validated['booking_id']);
 
             $this->authorize('pay', $booking);
 
@@ -61,70 +51,51 @@ class PaymentController extends Controller
                 return $this->error('Booking sudah expired', [], 400);
             }
 
-            if ($booking->payment) {
-                return $this->error('Payment sudah ada', [], 400);
+            // Gunakan konstanta yang ada di Model/Status kamu
+            if ($booking->status_id != 1) { // 1 = Pending
+                return $this->forbidden('Booking tidak bisa dibayar');
             }
 
-            if ($booking->status_id !== BookingStatus::pending()) {
-                return $this->forbidden('Booking tidak bisa dibayar', [], 403);
+            // Reuse existing pending payment
+            $existingPayment = Payment::where('booking_id', $booking->id)
+                ->where('payment_status_id', Payment::PENDING)
+                ->first();
+
+            if ($existingPayment && $existingPayment->snap_token) {
+                return $this->success(
+                    new PaymentResource($existingPayment),
+                    'Gunakan token pembayaran yang sudah ada'
+                );
             }
 
-            $payment = DB::transaction(function () use ($validated, $booking) {
+            $payment = DB::transaction(function () use ($booking) {
+                // Asumsi MidtransService kamu sudah oke
+                $midtransService = new \App\Services\MidtransService();
+                $midtransRes = $midtransService->createTransaction($booking);
+
+                if (!$midtransRes) {
+                    throw new \Exception("Gagal menginisialisasi pembayaran ke Midtrans");
+                }
+
                 return Payment::create([
-                    'booking_id' => $booking->id,
-                    'payment_method' => $validated['payment_method'],
-                    'amount' => $booking->final_price,
-                    'payment_status_id' => PaymentStatus::pending(),
-                    'expired_at' => $booking->expires_at,
+                    'booking_id'        => $booking->id,
+                    'payment_method'    => 'midtrans',
+                    'amount'            => $booking->final_price,
+                    'payment_status_id' => Payment::PENDING,
+                    'snap_token'        => $midtransRes['token'],
+                    'snap_url'          => $midtransRes['redirect_url'],
+                    'expired_at'        => $booking->expires_at,
                 ]);
             });
 
             return $this->created(
-                $payment->load(['booking', 'status']),
-                'Payment berhasil dibuat'
+                new PaymentResource($payment->load(['booking', 'status'])),
+                'Payment berhasil dibuat, silakan selesaikan pembayaran.'
             );
-        } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
-            return $this->forbidden();
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            return $this->notFound('Booking tidak ditemukan');
         } catch (\Exception $e) {
-            return $this->error('Terjadi kesalahan server', [], 500);
+            \Illuminate\Support\Facades\Log::error("Payment Store Error: " . $e->getMessage());
+            return $this->error($e->getMessage(), [], 500);
         }
-    }
-
-    // Confirm payment
-
-    public function confirm(Request $request, $id)
-    {
-        return DB::transaction(function () use ($request, $id) {
-            // 1. Lock data untuk keamanan tinggi
-            $payment = Payment::with('booking')->lockForUpdate()->findOrFail($id);
-
-            $this->authorize('update', $payment);
-
-            // 2. Gunakan logic dari Model (Clean Code)
-            if ($payment->isPaid()) {
-                return $this->error('Pembayaran ini sudah diproses sebelumnya.', [], 422);
-            }
-
-            // 3. Eksekusi update
-            // Kita modifikasi sedikit markAsPaid di model nanti
-            $payment->update([
-                'transaction_id' => $request->transaction_id ?? $payment->transaction_id,
-                'payment_method' => $request->payment_method ?? $payment->payment_method,
-                'notes' => $request->notes
-            ]);
-
-            $payment->markAsPaid();
-
-            // 4. Dispatch Event
-            event(new \App\Events\BookingApproved($payment->booking));
-
-            return $this->success(
-                $payment->load('status'),
-                'Pembayaran dan Booking berhasil dikonfirmasi!'
-            );
-        });
     }
 
     /**
@@ -132,62 +103,33 @@ class PaymentController extends Controller
      */
     public function show($id)
     {
-        try {
-            $payment = Payment::with(['booking', 'status'])
-                ->findOrFail($id);
+        $payment = Payment::with(['booking', 'status'])->findOrFail($id);
+        $this->authorize('view', $payment);
 
-            $this->authorize('view', $payment);
-
-            return $this->success(
-                $payment,
-                'Detail payment berhasil diambil'
-            );
-        } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
-            return $this->forbidden();
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            return $this->notFound('Payment tidak ditemukan');
-        } catch (\Exception $e) {
-            return $this->error('Terjadi kesalahan server', [], 500);
-        }
+        return $this->success(new PaymentResource($payment), 'Detail payment berhasil diambil');
     }
 
     /**
-     * CANCEL PAYMENT
+     * CANCEL PAYMENT (Oleh User)
      */
     public function cancel($id)
     {
-        try {
-            $payment = Payment::findOrFail($id);
+        $payment = Payment::findOrFail($id);
+        $this->authorize('cancel', $payment);
 
-            // 1. Authorize dulu (cek di PaymentPolicy@cancel)
-            $this->authorize('cancel', $payment);
-
-            // 2. Business Rule: Jangan cancel yang sudah dibayar
-            if ($payment->payment_status_id === PaymentStatus::paid()) {
-                return $this->error('Tidak bisa cancel payment yang sudah dibayar', [], 400);
-            }
-
-            // 3. Update Status dalam transaction
-            DB::transaction(function () use ($payment) {
-                $payment->update([
-                    'payment_status_id' => PaymentStatus::cancelled()
-                ]);
-
-                // Update booking status & release slots
-                $payment->booking->update([
-                    'status_id' => BookingStatus::cancelled()
-                ]);
-
-                $payment->booking->timeSlots()->detach();
-
-                event(new \App\Events\PaymentCancelled($payment));
-            });
-
-            return $this->success(null, 'Payment berhasil dibatalkan');
-        } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
-            return $this->forbidden();
-        } catch (\Exception $e) {
-            return $this->error('Terjadi kesalahan server', [], 500);
+        if ($payment->isPaid()) {
+            return $this->error('Tidak bisa cancel payment yang sudah dibayar', [], 400);
         }
+
+        DB::transaction(function () use ($payment) {
+            $payment->update(['payment_status_id' => Payment::CANCELLED]);
+
+            $payment->booking->update(['status_id' => 3]); // 3 = Cancelled
+            $payment->booking->timeSlots()->detach();
+
+            event(new \App\Events\PaymentCancelled($payment));
+        });
+
+        return $this->success(null, 'Payment berhasil dibatalkan');
     }
 }

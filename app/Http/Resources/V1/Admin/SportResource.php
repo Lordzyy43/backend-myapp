@@ -1,11 +1,11 @@
 <?php
 
-namespace App\Http\Resources\V1\Shared;
+namespace App\Http\Resources\V1\Admin;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-class ImageResource extends JsonResource
+class SportResource extends JsonResource
 {
     /**
      * Transform the resource into an array.
@@ -16,8 +16,9 @@ class ImageResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'image_url' => $this->image_path ? asset('storage/' . $this->image_path) : null,
-            'is_primary' => (bool) $this->is_primary, // Kita paksa jadi boolean
+            'name' => $this->name,
+            'slug' => $this->slug,
+            'icon_url' => $this->icon ? asset('storage/' . $this->icon) : null,
         ];
     }
 }

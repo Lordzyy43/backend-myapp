@@ -16,12 +16,19 @@ abstract class Controller
         // Jika data adalah Laravel Resource, kita ambil array-nya
         // Ini menjaga konsistensi jika kamu pakai API Resource
         if ($data instanceof JsonResource || $data instanceof ResourceCollection) {
-            $data = $data->response()->getData(true);
+            $resourceData = $data->response()->getData(true); // Simpan ke variabel baru
 
-            // Jika Resource sudah punya metadata bawaan, kita gabung
-            if (isset($data['meta'])) {
-                $meta = array_merge((array)$meta, $data['meta']);
-                $data = $data['data'];
+            // Jika Resource punya pagination (ada key 'meta' dan 'links')
+            if (isset($resourceData['meta'])) {
+                $meta = array_merge((array)$meta, $resourceData['meta']);
+                // Jika ingin menyertakan link pagination juga:
+                if (isset($resourceData['links'])) {
+                    $meta['links'] = $resourceData['links'];
+                }
+                $data = $resourceData['data'];
+            } else {
+                // Jika Resource biasa (bukan pagination)
+                $data = $resourceData;
             }
         }
 
