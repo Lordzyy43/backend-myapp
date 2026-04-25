@@ -5,6 +5,7 @@ namespace App\Http\Controllers\API\V1\User;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Notification;
+use App\Http\Resources\V1\User\NotificationResource;
 use Illuminate\Support\Facades\DB;
 
 class NotificationController extends Controller
@@ -22,10 +23,11 @@ class NotificationController extends Controller
 
         $notifications = $query->latest()->paginate($request->get('per_page', 10));
 
-        // JANGAN pakai ->items(), kirim langsung $notifications
-        return $this->success([
-            'notifications' => $notifications
-        ], 'List notifikasi berhasil diambil');
+        // Cukup kirim collection-nya, Base Controller akan urus sisanya!
+        return $this->success(
+            NotificationResource::collection($notifications),
+            'List notifikasi berhasil diambil'
+        );
     }
 
     /**
@@ -43,7 +45,7 @@ class NotificationController extends Controller
             ]);
         }
 
-        return $this->success(null, 'Notification berhasil ditandai sebagai dibaca');
+        return $this->success(new NotificationResource($notification), 'Notification berhasil ditandai sebagai dibaca');
     }
 
     /**

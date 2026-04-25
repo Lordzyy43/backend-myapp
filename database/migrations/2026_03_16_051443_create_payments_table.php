@@ -27,6 +27,10 @@ return new class extends Migration
 
             $table->decimal('amount', 12, 2);
 
+            // midtrans,
+            $table->string('snap_token')->nullable();
+            $table->string('snap_url')->nullable();
+
             // 🔥 reference dari gateway (midtrans, xendit, dll)
             $table->string('transaction_id')->nullable();
 

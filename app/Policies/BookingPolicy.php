@@ -4,20 +4,24 @@ namespace App\Policies;
 
 use App\Models\User;
 use App\Models\Booking;
+use Illuminate\Auth\Access\Response;
 
 class BookingPolicy
 {
     /**
-     * Helper untuk cek apakah user adalah admin
+     * 🔥 SUPERPOWERS (Admin Bypass)
+     * Laravel akan menjalankan ini sebelum method lain.
+     * Jika return true, admin bisa melakukan apa saja tanpa perlu cek method di bawah.
      */
-    private function isAdmin(User $user): bool
+    public function before(User $user, $ability)
     {
-        // Gunakan optional() atau null safe operator jika role bisa null
-        return $user->role?->role_name === 'admin';
+        if ($user->role?->role_name === 'admin') {
+            return true;
+        }
     }
 
     /**
-     * Helper untuk cek apakah user adalah pemilik booking
+     * Helper Internal: Cek Kepemilikan
      */
     private function isOwner(User $user, Booking $booking): bool
     {
@@ -25,59 +29,65 @@ class BookingPolicy
     }
 
     /**
-     * VIEW ANY (Laporan/List Admin)
+     * VIEW ANY: Hanya admin yang bisa melihat list semua booking global.
+     * (User biasa melihat list lewat endpoint 'me/bookings' yang sudah difilter di Controller)
      */
     public function viewAny(User $user): bool
     {
-        return $this->isAdmin($user);
+        return false; // Diblokir karena 'before' sudah menghandle admin
     }
 
     /**
-     * VIEW DETAIL
+     * VIEW DETAIL: Hanya pemilik atau admin.
      */
     public function view(User $user, Booking $booking): bool
     {
-        return $this->isAdmin($user) || $this->isOwner($user, $booking);
+        return $this->isOwner($user, $booking)
+            ? Response::allow()
+            : Response::deny('Kamu tidak memiliki akses ke detail booking ini.');
     }
 
     /**
-     * CANCEL (User & Admin)
-     * Kita bebaskan aksesnya di sini, validasi status id ada di Service.
+     * CREATE: Semua user yang sudah login/verified boleh buat booking.
+     */
+    public function create(User $user): bool
+    {
+        return true;
+    }
+
+    /**
+     * CANCEL: Hanya pemilik yang bisa cancel booking-nya sendiri.
+     * Note: Logika status (apakah sudah lewat jam dsb) tetap di Service/Controller.
      */
     public function cancel(User $user, Booking $booking): bool
     {
-        return $this->isAdmin($user) || $this->isOwner($user, $booking);
+        return $this->isOwner($user, $booking);
     }
 
     /**
-     * APPROVE (Admin Only)
-     */
-    public function approve(User $user, Booking $booking): bool
-    {
-        return $this->isAdmin($user);
-    }
-
-    /**
-     * REJECT (Admin Only)
-     */
-    public function reject(User $user, Booking $booking): bool
-    {
-        return $this->isAdmin($user);
-    }
-
-    /**
-     * FINISH (Admin Only)
-     */
-    public function finish(User $user, Booking $booking): bool
-    {
-        return $this->isAdmin($user);
-    }
-
-    /**
-     * PAY (Owner Only)
+     * PAY: Sangat krusial! Hanya pemilik yang boleh membayar.
+     * Jangan biarkan orang lain membayar booking orang lain tanpa izin.
      */
     public function pay(User $user, Booking $booking): bool
     {
         return $this->isOwner($user, $booking);
+    }
+
+    /**
+     * MANAGE (Approve, Reject, Finish): Khusus Admin.
+     * Method di bawah ini akan otomatis return false untuk user biasa,
+     * dan true untuk admin (karena ditangani oleh method 'before').
+     */
+    public function approve(User $user, Booking $booking): bool
+    {
+        return false;
+    }
+    public function reject(User $user, Booking $booking): bool
+    {
+        return false;
+    }
+    public function finish(User $user, Booking $booking): bool
+    {
+        return false;
     }
 }

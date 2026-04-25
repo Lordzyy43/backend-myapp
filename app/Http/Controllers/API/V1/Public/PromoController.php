@@ -4,6 +4,7 @@ namespace App\Http\Controllers\API\V1\Public;
 
 use App\Http\Controllers\Controller;
 use App\Services\PromoService;
+use App\Http\Resources\V1\Public\PromoResource;
 use Illuminate\Http\Request;
 
 class PromoController extends Controller
@@ -23,10 +24,11 @@ class PromoController extends Controller
         try {
             $promos = $this->promoService->getActivePromos();
 
-            return $this->success([
-                'data' => $promos->map(fn($promo) => $this->formatPromoResponse($promo)),
-                'count' => $promos->count(),
-            ], 'Active promo codes retrieved');
+            // Gunakan Resource agar formatting konsisten di semua API
+            return $this->success(
+                PromoResource::collection($promos),
+                'Active promo codes retrieved'
+            );
         } catch (\Exception $e) {
             return $this->error('Failed to retrieve promo codes', $e->getMessage(), 500);
         }
@@ -50,7 +52,7 @@ class PromoController extends Controller
 
             $details = $this->promoService->getPromoDetails($request->code);
 
-            return $this->success($details, 'Promo code is valid');
+            return $this->success(new PromoResource($details), 'Promo code is valid');
         } catch (\Exception $e) {
             return $this->error('Validation failed', $e->getMessage(), 400);
         }

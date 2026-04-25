@@ -2,8 +2,8 @@
 
 namespace App\Http\Resources\V1\User;
 
-use App\Http\Resources\V1\Public\CourtResource;
-use App\Http\Resources\V1\Shared\SportResource;
+use App\Http\Resources\V1\User\CourtResource;
+use App\Http\Resources\V1\User\SportResource;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 

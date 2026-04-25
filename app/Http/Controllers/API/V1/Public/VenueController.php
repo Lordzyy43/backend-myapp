@@ -4,6 +4,8 @@ namespace App\Http\Controllers\API\V1\Public;
 
 use App\Http\Controllers\Controller;
 use App\Models\Venue;
+use App\Http\Resources\V1\Public\VenueResource;
+use Illuminate\Http\Request;
 
 class VenueController extends Controller
 {
@@ -13,30 +15,41 @@ class VenueController extends Controller
     public function index()
     {
         try {
-            $venues = Venue::with(['courts'])
+            $venues = Venue::with(['images' => fn($q) => $q->where('is_primary', true)])
+                ->withCount('reviews')
+                ->withAvg('reviews', 'rating')
                 ->latest()
                 ->get();
 
-            return $this->success($venues, 'List venue berhasil diambil');
+            // Pakai ::collection untuk data banyak
+            return $this->success(
+                VenueResource::collection($venues),
+                'List venue berhasil diambil'
+            );
         } catch (\Exception $e) {
             return $this->error('Gagal mengambil data venue', $e->getMessage(), 500);
         }
     }
 
-    /**
-     * DETAIL VENUE (PUBLIC)
-     */
+
+    // SHOW VENUE DETAIL (PUBLIC)
     public function show(string $id)
     {
         try {
             $venue = Venue::with(['courts', 'images', 'operatingHours'])
+                ->withCount('reviews')
+                ->withAvg('reviews', 'rating')
                 ->find($id);
 
             if (!$venue) {
                 return $this->notFound('Venue tidak ditemukan');
             }
 
-            return $this->success($venue, 'Detail venue berhasil diambil');
+            // Pakai 'new' untuk data tunggal
+            return $this->success(
+                new VenueResource($venue),
+                'Detail venue berhasil diambil'
+            );
         } catch (\Exception $e) {
             return $this->error('Gagal mengambil detail venue', $e->getMessage(), 500);
         }

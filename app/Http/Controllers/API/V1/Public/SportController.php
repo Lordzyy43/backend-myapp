@@ -3,86 +3,52 @@
 namespace App\Http\Controllers\API\V1\Public;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
+use App\Http\Resources\V1\Public\SportResource; // Import Resource-nya
 use App\Models\Sport;
+use Illuminate\Http\Request;
 
 class SportController extends Controller
 {
     /**
-     * Get all active sports
+     * Get all active sports (PUBLIC)
      */
     public function index()
     {
-        $sports = Sport::active()
-            ->orderBy('sort_order')
-            ->get();
+        try {
+            $sports = Sport::active()
+                ->orderBy('sort_order')
+                ->get();
 
-        return response()->json([
-            'message' => 'Success',
-            'data' => $sports
-        ]);
+            // Gunakan Resource agar icon_url ter-generate otomatis
+            return $this->success(
+                SportResource::collection($sports),
+                'List cabang olahraga berhasil diambil'
+            );
+        } catch (\Exception $e) {
+            return $this->error('Gagal mengambil data sport', $e->getMessage(), 500);
+        }
     }
 
     /**
-     * Store sport (admin)
-     */
-    public function store(Request $request)
-    {
-        $request->validate([
-            'name' => 'required|unique:sports,name',
-            'icon' => 'nullable|string',
-            'image' => 'nullable|string',
-        ]);
-
-        $sport = Sport::create($request->all());
-
-        return response()->json([
-            'message' => 'Sport berhasil dibuat',
-            'data' => $sport
-        ], 201);
-    }
-
-    /**
-     * Show by slug (frontend friendly)
+     * Show by slug (PUBLIC)
      */
     public function show($slug)
     {
-        $sport = Sport::where('slug', $slug)->firstOrFail();
+        try {
+            $sport = Sport::active()
+                ->where('slug', $slug)
+                ->first();
 
-        return response()->json([
-            'message' => 'Success',
-            'data' => $sport
-        ]);
-    }
+            if (!$sport) {
+                return $this->notFound('Cabang olahraga tidak ditemukan atau tidak aktif');
+            }
 
-    /**
-     * Update sport
-     */
-    public function update(Request $request, $id)
-    {
-        $sport = Sport::findOrFail($id);
-
-        $sport->update($request->all());
-
-        return response()->json([
-            'message' => 'Sport berhasil diupdate',
-            'data' => $sport
-        ]);
-    }
-
-    /**
-     * Disable sport (soft disable, bukan delete)
-     */
-    public function destroy($id)
-    {
-        $sport = Sport::findOrFail($id);
-
-        $sport->update([
-            'is_active' => false
-        ]);
-
-        return response()->json([
-            'message' => 'Sport berhasil dinonaktifkan'
-        ]);
+            return $this->success(
+                new SportResource($sport),
+                'Detail cabang olahraga berhasil diambil'
+            );
+        } catch (\Exception $e) {
+            return $this->error('Gagal mengambil detail sport', $e->getMessage(), 500);
+        }
     }
 }

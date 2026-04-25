@@ -2,7 +2,7 @@
 
 namespace App\Http\Resources\V1\Admin;
 
-use App\Http\Resources\V1\Shared\TimeSlotResource;
+use App\Http\Resources\V1\Admin\TimeSlotResource;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
