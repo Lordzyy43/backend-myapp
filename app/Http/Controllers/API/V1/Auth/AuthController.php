@@ -3,99 +3,126 @@
 namespace App\Http\Controllers\API\V1\Auth;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\User;
 use App\Models\Role;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\ValidationException;
 use Illuminate\Auth\Events\Registered;
+use App\Http\Requests\API\V1\Auth\LoginRequest;
+use App\Http\Requests\API\V1\Auth\RegisterRequest;
+use App\Http\Requests\API\V1\User\UpdateProfileRequest;
+use App\Http\Resources\V1\Admin\UserResource;
 
 class AuthController extends Controller
 {
     /**
      * REGISTER
+     * Menggunakan RegisterRequest untuk validasi ketat.
      */
-    public function register(Request $request)
+    public function register(RegisterRequest $request)
     {
         try {
-            $validated = $request->validate([
-                'name' => 'required|string|max:255',
-                'email' => 'required|email|unique:users,email',
-                'password' => 'required|min:6',
-                'phone' => 'nullable|string|max:20',
-            ]);
-
-            $role = Role::where('role_name', 'user')->firstOrFail();
+            // Ambil role default (User)
+            $role = Role::where('id', User::ROLE_USER)->first()
+                ?? Role::where('role_name', 'user')->first();
 
             $user = User::create([
-                'name' => $validated['name'],
-                'email' => $validated['email'],
-                'password' => $validated['password'], // 🔥 auto hash via cast
-                'phone' => $validated['phone'] ?? null,
-                'role_id' => $role->id,
-                'email_verified_at' => null,
+                'name'     => $request->name,
+                'email'    => $request->email,
+                'password' => $request->password, // Auto-hash via Model Cast
+                'phone'    => $request->phone,
+                'role_id'  => $role->id,
             ]);
 
-            // 🔥 Trigger email verification
+            // Trigger event untuk kirim email verifikasi
             event(new Registered($user));
 
-            return $this->success(null, 'Register berhasil, silakan verifikasi email');
-        } catch (ValidationException $e) {
-            return $this->error('Validasi gagal', $e->errors(), 422);
+            return $this->success(
+                new UserResource($user),
+                'Registrasi berhasil! Silakan cek email untuk verifikasi.',
+                201
+            );
         } catch (\Exception $e) {
-            return $this->error('Gagal register', $e->getMessage(), 500);
+            return $this->error('Gagal registrasi', $e->getMessage(), 500);
         }
     }
 
     /**
      * LOGIN
+     * Menggunakan LoginRequest & Sanctum Token.
      */
-    public function login(Request $request)
+    public function login(LoginRequest $request)
     {
         try {
-            $validated = $request->validate([
-                'email' => 'required|email',
-                'password' => 'required',
-                'device_name' => 'required|string|max:255', // 🔥 penting
-            ]);
+            $user = User::where('email', $request->email)->first();
 
-            $user = User::where('email', $validated['email'])->first();
-
-            if (!$user || !Hash::check($validated['password'], $user->password)) {
+            if (!$user || !Hash::check($request->password, $user->password)) {
                 return $this->error('Email atau password salah', null, 401);
             }
 
-            // 🔥 BLOCK kalau belum verify
-            if (!$user->email_verified_at) {
-                return $this->error('Email belum diverifikasi', null, 403);
+            // Cek verifikasi email
+            if (!$user->hasVerifiedEmail()) {
+                return $this->error('Email kamu belum diverifikasi nih.', null, 403);
             }
 
-            // 🔥 create token per device
-            $token = $user->createToken($validated['device_name'])->plainTextToken;
+            // Buat token (device_name default ke 'Unknown Device' jika kosong)
+            $deviceName = $request->device_name ?? 'Browser/Mobile';
+            $token = $user->createToken($deviceName)->plainTextToken;
 
             return $this->success([
                 'token' => $token,
-                'user' => $user->load('role')
-            ], 'Login berhasil');
-        } catch (ValidationException $e) {
-            return $this->error('Validasi gagal', $e->errors(), 422);
+                'user'  => new UserResource($user->load('role')),
+            ], 'Login berhasil! Selamat datang kembali.');
         } catch (\Exception $e) {
             return $this->error('Gagal login', $e->getMessage(), 500);
         }
     }
 
     /**
-     * LOGOUT (CURRENT DEVICE ONLY)
+     * GET PROFILE (ME)
+     */
+    public function me(Request $request)
+    {
+        return $this->success(
+            new UserResource($request->user()->load('role')),
+            'Data profil berhasil diambil.'
+        );
+    }
+
+    /**
+     * UPDATE PROFILE
+     * Menggunakan UpdateProfileRequest yang sudah kita buat.
+     */
+    public function update(UpdateProfileRequest $request)
+    {
+        try {
+            $user = $request->user();
+
+            // Update data yang dikirim (fillable aman)
+            $user->fill($request->validated());
+
+            if ($request->filled('password')) {
+                $user->password = $request->password;
+            }
+
+            $user->save();
+
+            return $this->success(
+                new UserResource($user),
+                'Profil berhasil diperbarui!'
+            );
+        } catch (\Exception $e) {
+            return $this->error('Gagal memperbarui profil', $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * LOGOUT
      */
     public function logout(Request $request)
     {
-        try {
-            $request->user()->currentAccessToken()->delete();
-
-            return $this->success(null, 'Logout berhasil');
-        } catch (\Exception $e) {
-            return $this->error('Gagal logout', $e->getMessage(), 500);
-        }
+        $request->user()->currentAccessToken()->delete();
+        return $this->success(null, 'Logout berhasil. Sampai jumpa lagi!');
     }
 
     /**
@@ -103,27 +130,7 @@ class AuthController extends Controller
      */
     public function logoutAll(Request $request)
     {
-        try {
-            $request->user()->tokens()->delete();
-
-            return $this->success(null, 'Logout semua device berhasil');
-        } catch (\Exception $e) {
-            return $this->error('Gagal logout semua device', $e->getMessage(), 500);
-        }
-    }
-
-    /**
-     * GET CURRENT USER
-     */
-    public function me(Request $request)
-    {
-        try {
-            return $this->success(
-                ['user' => $request->user()->load('role')],
-                'Data user berhasil diambil'
-            );
-        } catch (\Exception $e) {
-            return $this->error('Gagal mengambil data user', $e->getMessage(), 500);
-        }
+        $request->user()->tokens()->delete();
+        return $this->success(null, 'Semua sesi perangkat telah dihentikan.');
     }
 }
