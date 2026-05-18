@@ -141,6 +141,24 @@ class ReviewController extends Controller
         }
     }
 
+    public function show(string $id)
+    {
+        try {
+            $review = Review::with(['user', 'court'])
+                ->where('user_id', auth()->id())
+                ->findOrFail($id);
+
+            return $this->success(
+                new ReviewResource($review),
+                'Detail review berhasil diambil'
+            );
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return $this->notFound('Review tidak ditemukan');
+        } catch (\Exception $e) {
+            return $this->error('Gagal mengambil detail review', $e->getMessage(), 500);
+        }
+    }
+
     /**
      * ACTION: MARK AS HELPFUL & REPORT
      */

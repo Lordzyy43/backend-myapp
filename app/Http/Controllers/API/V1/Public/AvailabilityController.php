@@ -53,12 +53,10 @@ class AvailabilityController extends Controller
 
             // 🔥 OPTIMASI: Hanya ambil slot yang masuk dalam jam operasional via Query
             $slots = TimeSlot::active()
-                ->whereTime('start_time', '>=', $operating->open_time)
-                ->whereTime('end_time', '<=', $operating->close_time)
                 ->orderBy('order_index')
                 ->get();
 
-            return $slots->map(function ($slot) use ($bookedSlotIds, $date, $today, $now, $isMaintenance) {
+            return $slots->map(function ($slot) use ($bookedSlotIds, $date, $today, $now, $isMaintenance, $operating) {
                 $reason = null;
                 $slotId = (int)$slot->id;
 
@@ -71,7 +69,9 @@ class AvailabilityController extends Controller
                 } elseif (in_array($slotId, $bookedSlotIds)) {
                     $reason = 'booked';
                 } elseif ($date->isToday() && $sStart->copy()->setDateFrom($date)->lt($now)) {
-                    $reason = 'passed';
+                    $reason = 'past_time';
+                } elseif ($sStart->format('H:i:s') < $operating->open_time || $sEnd->format('H:i:s') > $operating->close_time) {
+                    $reason = 'outside_operating_hours';
                 }
 
                 return [

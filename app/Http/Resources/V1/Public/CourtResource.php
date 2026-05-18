@@ -4,7 +4,7 @@ namespace App\Http\Resources\V1\Public;
 
 use App\Http\Resources\V1\Public\ImageResource;
 use App\Http\Resources\V1\Public\SportResource;
-use App\Http\Resources\V1\Public\MaintenenceResource;
+use App\Http\Resources\V1\Public\MaintenanceResource;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 

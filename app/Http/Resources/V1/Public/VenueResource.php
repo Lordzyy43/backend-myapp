@@ -2,8 +2,8 @@
 
 namespace App\Http\Resources\V1\Public;
 
-use App\Http\Resources\V1\Shared\ImageResource;
-use App\Http\Resources\V1\Shared\OperatingHourResource;
+use App\Http\Resources\V1\Public\ImageResource;
+use App\Http\Resources\V1\Public\OperatingHourResource;
 use App\Http\Resources\V1\Public\CourtResource;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;

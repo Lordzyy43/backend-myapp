@@ -36,10 +36,26 @@ class BookingController extends Controller
             ->latest()
             ->paginate(10);
 
-        return $this->success(
-            BookingResource::collection($bookings)->response()->getData(true),
-            'List booking berhasil diambil'
-        );
+        $items = BookingResource::collection($bookings)->resolve();
+
+        if (request()->has('per_page')) {
+            $items = [
+                'data' => $items,
+                'current_page' => $bookings->currentPage(),
+                'per_page' => $bookings->perPage(),
+                'total' => $bookings->total(),
+            ];
+        }
+
+        return $this->success([
+            'bookings' => $items,
+            'meta' => [
+                'current_page' => $bookings->currentPage(),
+                'last_page' => $bookings->lastPage(),
+                'per_page' => $bookings->perPage(),
+                'total' => $bookings->total(),
+            ],
+        ], 'List booking berhasil diambil');
     }
 
     /**
@@ -56,7 +72,7 @@ class BookingController extends Controller
             Cache::forget($cacheKey);
 
             return $this->success(
-                new BookingResource($booking->load(['court.sport', 'timeSlots', 'status'])),
+                ['booking' => new BookingResource($booking->load(['court.sport', 'timeSlots', 'status', 'payment']))],
                 'Booking created successfully',
                 201
             );
@@ -68,8 +84,16 @@ class BookingController extends Controller
                 return $this->error($message, $e->errors(), 400);
             }
 
+            if (array_key_exists('promo_code', $e->errors())) {
+                return $this->error('Validation failed', $e->errors(), 422);
+            }
+
             return $this->error($message, $e->errors(), 422);
         } catch (\Exception $e) {
+            if ($e->getMessage() === 'Promo code usage limit exceeded') {
+                return $this->error($e->getMessage(), [], 400);
+            }
+
             return $this->error($e->getMessage(), null, 422);
         }
     }
@@ -79,9 +103,12 @@ class BookingController extends Controller
      */
     public function show(string $id)
     {
-        // FindOrFail otomatis lempar 404 jika tidak ada
         $booking = Booking::with(['court.sport', 'timeSlots', 'status', 'payment'])
-            ->findOrFail($id);
+            ->find($id);
+
+        if (!$booking) {
+            return $this->notFound('Booking tidak ditemukan');
+        }
 
         $this->authorize('view', $booking);
 

@@ -96,9 +96,7 @@ class PaymentController extends Controller
 
             return $this->success($payment, 'Payment berhasil di-approve');
         } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
-            return $this->forbidden('Forbidden access. Admin only.', [
-                'role' => ['You do not have the required admin role.']
-            ]);
+            return $this->forbidden('Forbidden access. Admin only.');
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return $this->notFound('Payment tidak ditemukan');
         } catch (\Exception $e) {

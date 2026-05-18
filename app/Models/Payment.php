@@ -84,7 +84,7 @@ class Payment extends Model
      * 🔥 ATOMIC MARK AS PAID
      * Digunakan oleh Webhook Midtrans atau Manual Confirm Admin.
      */
-    public function markAsPaid(string $transactionId = null, array $midtransPayload = []): bool
+    public function markAsPaid(?string $transactionId = null, array $midtransPayload = []): bool
     {
         return DB::transaction(function () use ($transactionId, $midtransPayload) {
             // Lock row untuk mencegah double process dari webhook

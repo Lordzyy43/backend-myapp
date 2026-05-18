@@ -40,7 +40,7 @@ class AuthController extends Controller
             return $this->success(
                 new UserResource($user),
                 'Registrasi berhasil! Silakan cek email untuk verifikasi.',
-                201
+                200
             );
         } catch (\Exception $e) {
             return $this->error('Gagal registrasi', $e->getMessage(), 500);
@@ -84,7 +84,7 @@ class AuthController extends Controller
     public function me(Request $request)
     {
         return $this->success(
-            new UserResource($request->user()->load('role')),
+            ['user' => new UserResource($request->user()->load('role'))],
             'Data profil berhasil diambil.'
         );
     }

@@ -10,15 +10,10 @@ class PaymentPolicy
   /**
    * 🔥 GLOBAL OVERRIDE (HIGH PRIORITY)
    * - Admin selalu boleh (production)
-   * - Testing bypass semua policy
+   * - Non-admin tetap mengikuti policy masing-masing action
    */
   public function before(User $user, string $ability): bool|null
   {
-    // ✅ Testing hanya bypass untuk admin-only actions
-    if (app()->environment('testing') && in_array($ability, ['approve'])) {
-      return true;
-    }
-
     if ($user->isAdmin()) {
       return true;
     }

@@ -14,7 +14,9 @@ class PaymentResource extends JsonResource
     {
         return [
             'id'             => $this->id,
+            'booking_id'     => $this->booking_id,
             'transaction_id' => $this->transaction_id,
+            'payment_method' => $this->payment_method,
             'method'         => strtoupper($this->payment_method ?? 'NOT_SELECTED'),
 
             // Format Harga
@@ -27,10 +29,12 @@ class PaymentResource extends JsonResource
             // Status yang UI-Friendly
             'status' => [
                 'id'      => (int) $this->payment_status_id,
-                'label'   => $this->status->name ?? 'Unknown',
+                'label'   => $this->status->status_name ?? 'Unknown',
                 'color'   => $this->getStatusColor(),
                 'is_paid' => $this->isPaid(),
             ],
+            'payment_status_id' => (int) $this->payment_status_id,
+            'booking' => new BookingResource($this->whenLoaded('booking')),
 
             // Waktu & Kadaluarsa
             'paid_at'    => $this->paid_at ? $this->paid_at->toDateTimeString() : null,

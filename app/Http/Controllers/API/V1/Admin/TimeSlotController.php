@@ -9,6 +9,32 @@ use Illuminate\Validation\ValidationException;
 
 class TimeSlotController extends Controller
 {
+    public function index()
+    {
+        try {
+            $slots = TimeSlot::orderBy('order_index')->paginate(request('per_page', 20));
+
+            return $this->success($slots, 'List time slot berhasil diambil');
+        } catch (\Exception $e) {
+            return $this->error('Gagal mengambil time slot', $e->getMessage(), 500);
+        }
+    }
+
+    public function show(string $id)
+    {
+        try {
+            $slot = TimeSlot::find($id);
+
+            if (!$slot) {
+                return $this->notFound('Time slot tidak ditemukan');
+            }
+
+            return $this->success($slot, 'Detail time slot berhasil diambil');
+        } catch (\Exception $e) {
+            return $this->error('Gagal mengambil detail time slot', $e->getMessage(), 500);
+        }
+    }
+
     /**
      * CREATE SLOT
      */

@@ -28,7 +28,7 @@ abstract class Controller
                 $data = $resourceData['data'];
             } else {
                 // Jika Resource biasa (bukan pagination)
-                $data = $resourceData;
+                $data = $resourceData['data'] ?? $resourceData;
             }
         }
 

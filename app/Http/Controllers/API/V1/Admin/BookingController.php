@@ -78,7 +78,13 @@ class BookingController extends Controller
         // 🔥 STANDAR INDUSTRI: Idempotency
         // Jika status sudah 'confirmed', jangan lempar error (biarkan lolos ke Service).
         if ($status === 'confirmed') {
-          return;
+          if ($booking->payment?->isPaid()) {
+            return;
+          }
+
+          throw ValidationException::withMessages([
+            'booking' => ['Booking status cannot be changed']
+          ]);
         }
 
         // Tetap blokir jika status selain pending (misal: sudah rejected atau cancelled)
