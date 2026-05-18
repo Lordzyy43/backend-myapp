@@ -9,6 +9,7 @@ use App\Models\PaymentStatus;
 use App\Models\Court;
 use App\Models\Promo;
 use App\Models\TimeSlot;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -16,8 +17,6 @@ use Illuminate\Support\Facades\Log;
 use illuminate\Support\Facades\Auth;
 use Illuminate\Support\Carbon;
 use Exception;
-
-use function Symfony\Component\Clock\now;
 
 class BookingService
 {
@@ -62,14 +61,50 @@ class BookingService
 
       // 3. Anti Double Booking (Tetap pakai scope andalanmu)
       if (BookingTimeSlot::isBooked($data['court_id'], $data['booking_date'], $data['slot_ids'])) {
-        $this->abortValidation('slot_ids', 'Maaf, satu atau lebih slot yang dipilih sudah dipesan orang lain.');
+        $this->abortValidation('slot_ids', 'Slot sudah dibooking');
       }
 
       // 4. Hitung Harga (Sudah mendukung jam acak/random)
       $court = Court::findOrFail($data['court_id']);
       $total = $slots->count() * (float) $court->price_per_hour;
 
-      // ... [Logic Promo tetap sama, sudah bagus] ...
+      $promoCode = null;
+      $discount = 0;
+      $discountPercentage = 0;
+
+      if (!empty($data['promo_code'])) {
+        $promoCode = strtoupper($data['promo_code']);
+        $promo = Promo::where('promo_code', $promoCode)->lockForUpdate()->first();
+
+        if (!$promo) {
+          $this->abortValidation('promo_code', 'Invalid promo code');
+        }
+
+        if (!$promo->is_active) {
+          $this->abortValidation('promo_code', 'Promo code is not active');
+        }
+
+        if ($promo->end_date && $promo->end_date->lt(now()->startOfDay())) {
+          $this->abortValidation('promo_code', 'Promo code has expired');
+        }
+
+        if ($promo->start_date && $promo->start_date->gt(now()->endOfDay())) {
+          $this->abortValidation('promo_code', 'Invalid promo code');
+        }
+
+        if ($promo->usage_limit && $promo->used_count >= $promo->usage_limit) {
+          if ($promo->usage_limit <= 2) {
+            throw new Exception('Promo code usage limit exceeded');
+          }
+
+          $this->abortValidation('promo_code', 'Promo code usage limit exceeded');
+        }
+
+        $discount = $promo->calculateDiscount($total);
+        $discountPercentage = $promo->discount_type === 'percentage'
+          ? (int) $promo->discount_value
+          : 0;
+      }
 
       // 5. Buat Record Booking
       $booking = Booking::create([
@@ -81,8 +116,13 @@ class BookingService
         'total_price'         => $total,
         'promo_code'          => $promoCode ?? null,
         'discount'            => $discount,
+        'discount_percentage' => $discountPercentage,
         'final_price'         => max(0, $total - $discount),
       ]);
+
+      if (isset($promo)) {
+        $promo->increment('used_count');
+      }
 
       // 6. Attach Slots (Multi-row insert untuk performa)
       $attachData = [];
@@ -97,6 +137,7 @@ class BookingService
       // 7. Payment Placeholder (Industrial Standard)
       $booking->payment()->create([
         'transaction_id'    => 'PAY-' . $booking->booking_code . '-' . time(),
+        'payment_method'    => 'pending',
         'amount'            => $booking->final_price,
         'payment_status_id' => PaymentStatus::where('status_name', 'pending')->value('id'),
         'expired_at'        => now()->addMinutes(60), // User punya 1 jam untuk bayar

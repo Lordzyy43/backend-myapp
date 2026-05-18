@@ -58,4 +58,23 @@ class CourtController extends Controller
             return $this->error('Gagal mengambil detail court', $e->getMessage(), 500);
         }
     }
+
+    public function byVenue(string $venueId)
+    {
+        try {
+            $courts = Court::with(['venue', 'sport', 'images'])
+                ->withAvg('reviews', 'rating')
+                ->where('venue_id', $venueId)
+                ->where('status', 'active')
+                ->latest()
+                ->get();
+
+            return $this->success(
+                CourtResource::collection($courts),
+                'List court venue berhasil diambil'
+            );
+        } catch (\Exception $e) {
+            return $this->error('Gagal mengambil court venue', $e->getMessage(), 500);
+        }
+    }
 }

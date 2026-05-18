@@ -77,7 +77,7 @@ class CourtService
     /**
      * PRIVATE HELPER: Slug unik per Venue
      */
-    private function generateUniqueSlug(string $name, int $venueId, int $ignoreId = null): string
+    private function generateUniqueSlug(string $name, int $venueId, ?int $ignoreId = null): string
     {
         $slug = Str::slug($name);
         $originalSlug = $slug;

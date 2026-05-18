@@ -17,6 +17,17 @@ class BookingResource extends JsonResource
         return [
             'id' => $this->id,
             'booking_code' => $this->booking_code,
+            'user_id' => $this->user_id,
+            'court_id' => $this->court_id,
+            'booking_date' => $this->booking_date?->toDateString(),
+            'status_id' => $this->status_id,
+            'total_price' => (float) $this->total_price,
+            'promo_code' => $this->promo_code,
+            'discount' => (float) $this->discount,
+            'discount_amount' => (float) $this->discount_amount,
+            'discount_percentage' => (int) $this->discount_percentage_display,
+            'final_price' => (float) $this->final_price,
+            'expires_at' => $this->expires_at?->toDateTimeString(),
 
             // Info Lapangan & Olahraga
             'court' => new CourtResource($this->whenLoaded('court')),
@@ -51,12 +62,19 @@ class BookingResource extends JsonResource
             ],
 
             // Status & Pembayaran
-            'total_price' => (float) $this->total_price,
             'status' => [
-                'id' => $this->booking_status_id,
-                'label' => $this->status->name ?? 'Unknown',
+                'id' => $this->status_id,
+                'label' => $this->status->status_name ?? 'Unknown',
                 'color' => $this->getStatusColor(),
             ],
+            'time_slots' => $this->whenLoaded('timeSlots', function () {
+                return $this->timeSlots->map(fn($slot) => [
+                    'id' => $slot->id,
+                    'start_time' => $slot->start_time,
+                    'end_time' => $slot->end_time,
+                    'label' => $slot->label,
+                ]);
+            }),
 
             // Payment Info
             'payment' => new PaymentResource($this->whenLoaded('payment')),
@@ -72,7 +90,7 @@ class BookingResource extends JsonResource
      */
     private function getStatusColor(): string
     {
-        return match ($this->booking_status_id) {
+        return match ((int) $this->status_id) {
             1 => 'warning', // Pending
             2 => 'success', // Approved / Paid
             3 => 'danger',  // Cancelled / Rejected

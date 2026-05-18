@@ -22,7 +22,7 @@ use App\Http\Controllers\API\V1\Public\VenueController;
 use App\Http\Controllers\API\V1\Public\CourtController;
 use App\Http\Controllers\API\V1\Public\TimeSlotController;
 use App\Http\Controllers\API\V1\Public\AvailabilityController;
-use App\Http\Controllers\API\V1\Public\ReviewController;
+use App\Http\Controllers\API\V1\Public\ReviewController as PublicReviewController;
 use App\Http\Controllers\API\V1\Public\PromoController;
 use App\Http\Controllers\API\V1\Public\MidtransWebhookController;
 
@@ -30,6 +30,7 @@ use App\Http\Controllers\API\V1\Public\MidtransWebhookController;
 use App\Http\Controllers\API\V1\User\BookingController;
 use App\Http\Controllers\API\V1\User\PaymentController;
 use App\Http\Controllers\API\V1\User\NotificationController;
+use App\Http\Controllers\API\V1\User\ReviewController as UserReviewController;
 
 // Admin
 use App\Http\Controllers\API\V1\Admin\VenueController as AdminVenueController;
@@ -76,19 +77,20 @@ Route::prefix('v1')->group(function () {
     Route::get('/venues/{id}', [VenueController::class, 'show']);
 
     Route::get('/venues/{venue_id}/courts', [CourtController::class, 'byVenue']);
+    Route::get('/courts', [CourtController::class, 'index']);
     Route::get('/courts/{id}', [CourtController::class, 'show']);
 
     Route::get('/courts/{court_id}/timeslots', [TimeSlotController::class, 'byCourt']);
 
     Route::get('/availability', [AvailabilityController::class, 'index']);
 
-    Route::get('/reviews', [ReviewController::class, 'index']);
-    Route::get('/reviews/{id}', [ReviewController::class, 'show']);
-    Route::get('/courts/{courtId}/reviews', [ReviewController::class, 'getByCourt']);
-    Route::get('/courts/{courtId}/reviews/rating/{rating}', [ReviewController::class, 'getByRating']);
-    Route::get('/courts/{courtId}/reviews/distribution', [ReviewController::class, 'getRatingDistribution']);
-    Route::get('/courts/{courtId}/reviews/stats', [ReviewController::class, 'getStatistics']);
-    Route::get('/venues/{venueId}/reviews', [ReviewController::class, 'getByVenue']);
+    Route::get('/reviews', [PublicReviewController::class, 'index']);
+    Route::get('/reviews/{id}', [PublicReviewController::class, 'show']);
+    Route::get('/courts/{courtId}/reviews', [PublicReviewController::class, 'getByCourt']);
+    Route::get('/courts/{courtId}/reviews/rating/{rating}', [PublicReviewController::class, 'getByRating']);
+    Route::get('/courts/{courtId}/reviews/distribution', [PublicReviewController::class, 'getRatingDistribution']);
+    Route::get('/courts/{courtId}/reviews/stats', [PublicReviewController::class, 'getStatistics']);
+    Route::get('/venues/{venueId}/reviews', [PublicReviewController::class, 'getByVenue']);
 
     Route::get('/promos', [PromoController::class, 'index']);
     Route::get('/promos/expiring', [PromoController::class, 'expiringPromos']);
@@ -172,13 +174,13 @@ Route::prefix('v1')->group(function () {
     |--------------------------------------------------------------------------
     */
     Route::prefix('reviews')->group(function () {
-      Route::post('/', [ReviewController::class, 'store']);
-      Route::get('/my-reviews', [ReviewController::class, 'getUserReviews']);
-      Route::get('/{id}', [ReviewController::class, 'show']);
-      Route::patch('/{id}', [ReviewController::class, 'update']);
-      Route::delete('/{id}', [ReviewController::class, 'destroy']);
-      Route::post('/{id}/helpful', [ReviewController::class, 'markHelpful']);
-      Route::post('/{id}/report', [ReviewController::class, 'report']);
+      Route::post('/', [UserReviewController::class, 'store']);
+      Route::get('/my-reviews', [UserReviewController::class, 'index']);
+      Route::get('/my-reviews/{id}', [UserReviewController::class, 'show']);
+      Route::patch('/{id}', [UserReviewController::class, 'update']);
+      Route::delete('/{id}', [UserReviewController::class, 'destroy']);
+      Route::post('/{id}/helpful', [UserReviewController::class, 'markHelpful']);
+      Route::post('/{id}/report', [UserReviewController::class, 'report']);
     });
 
     /*

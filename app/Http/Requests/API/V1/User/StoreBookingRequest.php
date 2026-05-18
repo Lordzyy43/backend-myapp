@@ -3,6 +3,8 @@
 namespace App\Http\Requests\API\V1\User;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Contracts\Validation\Validator;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Carbon\Carbon;
 use App\Models\TimeSlot;
 
@@ -69,5 +71,19 @@ class StoreBookingRequest extends FormRequest
 
             'promo_code.max' => 'Kode promo terlalu panjang',
         ];
+    }
+
+    protected function failedValidation(Validator $validator): void
+    {
+        $status = $validator->errors()->first('court_id') === 'Court tidak valid'
+            && $validator->errors()->count() === 1
+            ? 400
+            : 422;
+
+        throw new HttpResponseException(response()->json([
+            'success' => false,
+            'message' => $validator->errors()->first(),
+            'errors' => $validator->errors(),
+        ], $status));
     }
 }

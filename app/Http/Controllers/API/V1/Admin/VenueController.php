@@ -10,6 +10,35 @@ use Illuminate\Validation\ValidationException;
 
 class VenueController extends Controller
 {
+    public function index()
+    {
+        try {
+            $venues = Venue::with(['owner', 'images', 'courts', 'operatingHours', 'sports'])
+                ->latest()
+                ->paginate(request('per_page', 10));
+
+            return $this->success($venues, 'List venue berhasil diambil');
+        } catch (\Exception $e) {
+            return $this->error('Gagal mengambil venue', $e->getMessage(), 500);
+        }
+    }
+
+    public function show(string $id)
+    {
+        try {
+            $venue = Venue::with(['owner', 'images', 'courts', 'operatingHours', 'sports'])
+                ->find($id);
+
+            if (!$venue) {
+                return $this->notFound('Venue tidak ditemukan');
+            }
+
+            return $this->success($venue, 'Detail venue berhasil diambil');
+        } catch (\Exception $e) {
+            return $this->error('Gagal mengambil detail venue', $e->getMessage(), 500);
+        }
+    }
+
     /**
      * CREATE VENUE
      */

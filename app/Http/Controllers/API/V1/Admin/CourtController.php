@@ -11,6 +11,34 @@ use Illuminate\Validation\ValidationException;
 
 class CourtController extends Controller
 {
+    public function index()
+    {
+        try {
+            $courts = Court::with(['venue', 'sport', 'images', 'maintenances'])
+                ->latest()
+                ->paginate(request('per_page', 10));
+
+            return $this->success($courts, 'List court berhasil diambil');
+        } catch (\Exception $e) {
+            return $this->error('Gagal mengambil court', $e->getMessage(), 500);
+        }
+    }
+
+    public function show(string $id)
+    {
+        try {
+            $court = Court::with(['venue', 'sport', 'images', 'maintenances'])->find($id);
+
+            if (!$court) {
+                return $this->notFound('Court tidak ditemukan');
+            }
+
+            return $this->success($court, 'Detail court berhasil diambil');
+        } catch (\Exception $e) {
+            return $this->error('Gagal mengambil detail court', $e->getMessage(), 500);
+        }
+    }
+
     /**
      * CREATE COURT
      */

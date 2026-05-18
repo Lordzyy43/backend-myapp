@@ -27,8 +27,6 @@ return new class extends Migration
             $table->timestamps();
 
             // 🔥 tidak boleh duplicate slot
-            $table->unique(['start_time', 'end_time']);
-
             // 🔥 bantu sorting cepat
             $table->index('start_time');
         });

@@ -4,7 +4,6 @@ namespace App\Policies;
 
 use App\Models\User;
 use App\Models\Booking;
-use Illuminate\Auth\Access\Response;
 
 class BookingPolicy
 {
@@ -42,9 +41,7 @@ class BookingPolicy
      */
     public function view(User $user, Booking $booking): bool
     {
-        return $this->isOwner($user, $booking)
-            ? Response::allow()
-            : Response::deny('Kamu tidak memiliki akses ke detail booking ini.');
+        return $this->isOwner($user, $booking);
     }
 
     /**

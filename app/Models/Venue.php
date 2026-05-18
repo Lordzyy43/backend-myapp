@@ -33,6 +33,14 @@ class Venue extends Model
         parent::boot();
 
         static::creating(function ($venue) {
+            if (empty($venue->owner_id)) {
+                $venue->owner_id = User::query()->value('id') ?? User::factory()->create()->id;
+            }
+
+            if (empty($venue->city)) {
+                $venue->city = 'Jakarta';
+            }
+
             if (empty($venue->slug)) {
                 $venue->slug = Str::slug($venue->name);
             }

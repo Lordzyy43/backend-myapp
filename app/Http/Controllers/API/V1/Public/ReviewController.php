@@ -36,6 +36,22 @@ class ReviewController extends Controller
     }
   }
 
+  public function show(string $id)
+  {
+    try {
+      $review = Review::with(['user', 'court'])->findOrFail($id);
+
+      return $this->success(
+        new ReviewResource($review),
+        'Review retrieved successfully'
+      );
+    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+      return $this->notFound('Review not found');
+    } catch (\Exception $e) {
+      return $this->error('Failed to retrieve review', $e->getMessage(), 500);
+    }
+  }
+
   /**
    * GET REVIEWS BY COURT - With pagination
    */

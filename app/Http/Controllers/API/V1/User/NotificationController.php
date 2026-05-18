@@ -23,11 +23,9 @@ class NotificationController extends Controller
 
         $notifications = $query->latest()->paginate($request->get('per_page', 10));
 
-        // Cukup kirim collection-nya, Base Controller akan urus sisanya!
-        return $this->success(
-            NotificationResource::collection($notifications),
-            'List notifikasi berhasil diambil'
-        );
+        return $this->success([
+            'notifications' => NotificationResource::collection($notifications)->response()->getData(true),
+        ], 'List notifikasi berhasil diambil');
     }
 
     /**
