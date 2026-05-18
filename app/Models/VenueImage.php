@@ -14,6 +14,11 @@ class VenueImage extends Model
     protected $fillable = [
         'venue_id',
         'image_url',
+        'is_primary',
+    ];
+
+    protected $casts = [
+        'is_primary' => 'boolean',
     ];
 
     /**

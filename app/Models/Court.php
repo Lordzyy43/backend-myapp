@@ -19,11 +19,15 @@ class Court extends Model
         'name',
         'price_per_hour',
         'status',
+        'average_rating',
+        'review_count',
         'slug',
     ];
 
     protected $casts = [
         'price_per_hour' => 'decimal:2',
+        'average_rating' => 'decimal:2',
+        'review_count' => 'integer',
     ];
 
     /**
