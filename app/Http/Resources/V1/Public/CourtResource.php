@@ -25,8 +25,10 @@ class CourtResource extends JsonResource
             // Info Olahraga
             'sport' => new SportResource($this->whenLoaded('sport')),
 
-            // Statistik (Gunakan aggregate withAvg dari Controller)
-            'rating' => round($this->reviews_avg_rating ?? 0, 1),
+            // Statistik
+            'rating' => round($this->reviews_avg_rating ?? $this->average_rating ?? 0, 1),
+            'average_rating' => round($this->reviews_avg_rating ?? $this->average_rating ?? 0, 2),
+            'review_count' => (int) ($this->reviews_count ?? $this->review_count ?? 0),
 
             // Foto-foto khusus lapangan ini
             'images' => ImageResource::collection($this->whenLoaded('images')),

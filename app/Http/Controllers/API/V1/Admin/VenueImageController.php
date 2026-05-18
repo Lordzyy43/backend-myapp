@@ -52,6 +52,7 @@ class VenueImageController extends Controller
             $request->validate([
                 'venue_id' => 'required|exists:venues,id',
                 'image' => 'required|image|mimes:jpg,jpeg,png|max:2048',
+                'is_primary' => 'sometimes|boolean',
             ]);
 
             $venue = Venue::findOrFail($request->venue_id);
@@ -65,10 +66,16 @@ class VenueImageController extends Controller
 
             // 🔥 simpan file
             $path = $request->file('image')->store('venue_images', 'public');
+            $isPrimary = $request->boolean('is_primary') || $venue->images()->count() === 0;
+
+            if ($isPrimary) {
+                VenueImage::where('venue_id', $venue->id)->update(['is_primary' => false]);
+            }
 
             $image = VenueImage::create([
                 'venue_id' => $venue->id,
                 'image_url' => $path,
+                'is_primary' => $isPrimary,
             ]);
 
             return response()->json([

@@ -139,7 +139,7 @@ class ReviewService
       $oldRating = $review->rating;
       $review->update([
         'rating' => $rating,
-        'comment' => $comment,
+        'review_text' => $comment,
       ]);
 
       Log::info("Review updated", [
@@ -189,35 +189,23 @@ class ReviewService
    */
   public function updateCourtRating(int $courtId): float
   {
-    try {
-      $averageRating = Review::where('court_id', $courtId)
-        ->avg('rating');
+    $averageRating = (float) (Review::where('court_id', $courtId)->avg('rating') ?? 0);
+    $reviewCount = Review::where('court_id', $courtId)->count();
 
-      $averageRating = $averageRating ?? 0;
-
-      // Update court's rating (assuming court has rating field)
-      DB::table('courts')
-        ->where('id', $courtId)
-        ->update([
-          'average_rating' => $averageRating,
-          'review_count' => Review::where('court_id', $courtId)->count(),
-        ]);
-
-      Log::info("Court rating updated", [
-        'court_id' => $courtId,
-        'average_rating' => $averageRating,
+    DB::table('courts')
+      ->where('id', $courtId)
+      ->update([
+        'average_rating' => round($averageRating, 2),
+        'review_count' => $reviewCount,
       ]);
 
-      return $averageRating;
-    } catch (\Exception $e) {
-      // Log but don't fail if average_rating column doesn't exist
-      // This will be implemented in Phase 2
-      Log::warning("Court rating update failed - column may not exist", [
-        'court_id' => $courtId,
-        'error' => $e->getMessage(),
-      ]);
-      return 0;
-    }
+    Log::info("Court rating updated", [
+      'court_id' => $courtId,
+      'average_rating' => $averageRating,
+      'review_count' => $reviewCount,
+    ]);
+
+    return $averageRating;
   }
 
   /**

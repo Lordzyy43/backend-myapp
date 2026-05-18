@@ -227,8 +227,27 @@ class ReviewTest extends TestCase
   #[Test]
   public function review_rating_updates_court_average_rating()
   {
-    // This test is skipped because the courts table doesn't have average_rating column
-    // This is a planned feature for Phase 2 (admin panel with court analytics)
-    $this->markTestSkipped('average_rating column not yet implemented in courts table');
+    $review = $this->reviewService->createBookingReview(
+      $this->finishedBooking,
+      $this->user,
+      5,
+      'Excellent court'
+    );
+
+    $this->court->refresh();
+    $this->assertEquals(5.0, (float) $this->court->average_rating);
+    $this->assertEquals(1, $this->court->review_count);
+
+    $this->reviewService->updateReview($review, 4, 'Still good');
+
+    $this->court->refresh();
+    $this->assertEquals(4.0, (float) $this->court->average_rating);
+    $this->assertEquals(1, $this->court->review_count);
+
+    $this->reviewService->deleteReview($review->refresh());
+
+    $this->court->refresh();
+    $this->assertEquals(0.0, (float) $this->court->average_rating);
+    $this->assertEquals(0, $this->court->review_count);
   }
 }
